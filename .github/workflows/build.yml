@@ -1,0 +1,65 @@
+name: Build APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+
+      # 签名：优先用仓库 Secrets 里的固定密钥（SIGNING_KEYSTORE_BASE64 + SIGNING_PASSWORD），
+      # 这样每次新版本都能直接覆盖安装；没有设置时临时生成一个（更新时需先卸载旧版）。
+      - name: Prepare signing key
+        env:
+          KS_B64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.SIGNING_PASSWORD }}
+        run: |
+          if [ -n "$KS_B64" ] && [ -n "$KS_PASS" ]; then
+            echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "SIGNING_PASSWORD=$KS_PASS" >> "$GITHUB_ENV"
+          else
+            echo "::warning::未设置签名 Secrets，本次使用临时密钥"
+            PASS=$(openssl rand -hex 16)
+            echo "::add-mask::$PASS"
+            keytool -genkeypair -keystore "$RUNNER_TEMP/release.jks" -storetype PKCS12 \
+              -alias tingdian -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass "$PASS" -keypass "$PASS" -dname "CN=TingDian"
+            echo "SIGNING_PASSWORD=$PASS" >> "$GITHUB_ENV"
+          fi
+          echo "SIGNING_KEYSTORE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+
+      - name: Build release APK
+        run: gradle assembleRelease --no-daemon --stacktrace
+
+      - name: Rename APK
+        run: cp app/build/outputs/apk/release/app-release.apk TingDian-v1.0.${{ github.run_number }}.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TingDian-apk
+          path: TingDian-v1.0.${{ github.run_number }}.apk
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: 听点 v1.0.${{ github.run_number }}
+          body: 手机上打开本页，点下面的 APK 下载安装。
+          files: TingDian-v1.0.${{ github.run_number }}.apk
+          make_latest: true

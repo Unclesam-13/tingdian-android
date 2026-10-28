@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="AppTheme" parent="android:Theme.DeviceDefault.DayNight.NoActionBar">
+        <item name="android:colorAccent">#0F6E74</item>
+        <item name="android:windowBackground">@color/page_bg</item>
+        <item name="android:statusBarColor">@color/page_bg</item>
+        <item name="android:navigationBarColor">@color/bar_bg</item>
+        <item name="android:windowLightStatusBar">@bool/light_bars</item>
+        <item name="android:windowLightNavigationBar">@bool/light_bars</item>
+    </style>
+
+    <color name="ic_bg">#0F6E74</color>
+    <color name="page_bg">#F3F5F6</color>
+    <color name="bar_bg">#FFFFFF</color>
+    <bool name="light_bars">true</bool>
+</resources>
