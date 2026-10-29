@@ -10,6 +10,7 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.provider.OpenableColumns
 import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import android.view.KeyEvent
 import android.view.WindowManager
 import android.webkit.JavascriptInterface
@@ -126,6 +127,14 @@ class MainActivity : Activity() {
 
         tts = TextToSpeech(this) { status ->
             ttsReady = status == TextToSpeech.SUCCESS
+            tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                override fun onStart(id: String?) {}
+                override fun onDone(id: String?) = notifyDone(id)
+                @Deprecated("Deprecated in Java")
+                override fun onError(id: String?) = notifyDone(id)
+                override fun onError(id: String?, errorCode: Int) = notifyDone(id)
+                override fun onStop(id: String?, interrupted: Boolean) = notifyDone(id)
+            })
             if (ttsReady) runOnUiThread { web.evaluateJavascript("window.onTtsReady && onTtsReady()", null) }
         }
 
@@ -178,6 +187,12 @@ class MainActivity : Activity() {
             pendingShare = "https://$HOST/__shared/$id" to name
         } catch (_: Exception) {}
         intent.action = null
+    }
+
+    /** 一段朗读结束，通知网页（用来在意群和整句之间停顿） */
+    private fun notifyDone(id: String?) {
+        id ?: return
+        runOnUiThread { web.evaluateJavascript("window.onTtsDone && onTtsDone(${JSONObject.quote(id)})", null) }
     }
 
     private fun deliverShare() {
@@ -249,17 +264,17 @@ class MainActivity : Activity() {
         }
 
         @JavascriptInterface
-        fun speak(text: String, lang: String, rate: Float, voiceName: String) {
-            val engine = tts ?: return
-            if (!ttsReady) return
+        fun speak(text: String, lang: String, rate: Float, voiceName: String, id: String) {
+            val engine = tts
+            if (engine == null || !ttsReady) { notifyDone(id); return }
             runOnUiThread {
                 try {
                     val voice = if (voiceName.isNotEmpty()) engine.voices?.firstOrNull { it.name == voiceName } else null
                     if (voice != null) engine.voice = voice
                     else engine.language = Locale.forLanguageTag(lang)
                     engine.setSpeechRate(rate)
-                    engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, "u" + System.nanoTime())
-                } catch (_: Exception) {}
+                    engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, id)
+                } catch (_: Exception) { notifyDone(id) }
             }
         }
 

@@ -178,10 +178,42 @@ button:active{filter:brightness(.95)}
   </section>
   <section class="panel">
     <h2>朗读声音</h2>
-    <label class="f">英文标准发音<select id="voiceSel"></select></label>
-    <label class="f">中文朗读<select id="zhVoiceSel"></select></label>
+    <label class="f">发音引擎
+      <select id="ttsEngine">
+        <option value="ai">OpenAI 自然人声（推荐）</option>
+        <option value="system">手机系统朗读（离线、免费）</option>
+      </select></label>
+    <div id="aiVoiceBox" style="display:grid;gap:12px">
+      <label class="f">英文人声
+        <select id="ttsVoiceEn">
+          <option value="coral">Coral · 女声，温暖自然</option>
+          <option value="nova">Nova · 女声，明亮</option>
+          <option value="shimmer">Shimmer · 女声，柔和</option>
+          <option value="sage">Sage · 女声，平稳</option>
+          <option value="alloy">Alloy · 中性</option>
+          <option value="ash">Ash · 男声，清晰</option>
+          <option value="echo">Echo · 男声，沉稳</option>
+          <option value="onyx">Onyx · 男声，低沉</option>
+          <option value="fable">Fable · 英式口音</option>
+        </select></label>
+      <label class="f">中文人声
+        <select id="ttsVoiceZh">
+          <option value="nova">Nova · 女声</option>
+          <option value="coral">Coral · 女声</option>
+          <option value="shimmer">Shimmer · 女声</option>
+          <option value="alloy">Alloy · 中性</option>
+          <option value="ash">Ash · 男声</option>
+          <option value="onyx">Onyx · 男声</option>
+        </select></label>
+      <label class="f">语音模型<input type="text" id="ttsModel" value="gpt-4o-mini-tts" autocomplete="off"></label>
+      <span class="hint">使用上面的 OpenAI Key，按字数计费，一个意群不到 0.1 分钱。同一句生成一次后就存在手机里，再播放不收费。</span>
+    </div>
+    <div id="sysVoiceBox" style="display:grid;gap:12px" hidden>
+      <label class="f">英文声音<select id="voiceSel"></select></label>
+      <label class="f">中文声音<select id="zhVoiceSel"></select></label>
+      <span class="hint">声音来自手机系统的“文字转语音”。名字里带 network 的通常更自然（需要联网）。没有声音时，到系统设置 → 无障碍 → 文字转语音 里下载语音包。</span>
+    </div>
     <button id="testVoice">试听</button>
-    <span class="hint">声音来自手机系统的“文字转语音”。没有中文或英文声音时，到系统设置 → 无障碍 → 文字转语音 里下载语音包。</span>
   </section>
   <div class="grid2">
     <button class="primary" id="saveSettings">保存</button>
@@ -286,8 +318,8 @@ const native = (fn, ...a) => { try{ if (NATIVE && window.Android[fn]) return win
 const DB = (() => {
   let p;
   const open = () => p || (p = new Promise((res, rej) => {
-    const r = indexedDB.open('tingdian', 1);
-    r.onupgradeneeded = () => { r.result.createObjectStore('audio'); r.result.createObjectStore('sess'); };
+    const r = indexedDB.open('tingdian', 2);
+    r.onupgradeneeded = () => { for (const n of ['audio','sess','tts']) if (!r.result.objectStoreNames.contains(n)) r.result.createObjectStore(n); };
     r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
   }));
   const tx = async (store, mode, fn) => { const db = await open(); return new Promise((res, rej) => {
@@ -322,7 +354,7 @@ function goBack(){
 window.onAndroidBack = () => goBack();
 
 /* ---------- 设置 ---------- */
-let cfg = Object.assign({openaiKey:'', baseUrl:'https://api.openai.com/v1', aiProvider:'openai', aiModel:'gpt-4o-mini', claudeKey:'', lookback:2.2, lag:0.25, volMark:true, vibrate:true}, LS.get('lh:cfg', {}));
+let cfg = Object.assign({openaiKey:'', baseUrl:'https://api.openai.com/v1', aiProvider:'openai', aiModel:'gpt-4o-mini', claudeKey:'', lookback:2.2, lag:0.25, volMark:true, vibrate:true, ttsEngine:'ai', ttsVoiceEn:'coral', ttsVoiceZh:'nova', ttsModel:'gpt-4o-mini-tts'}, LS.get('lh:cfg', {}));
 let prevScreen = 'home';
 function openSettings(){ prevScreen = screen; loadCfgUI(); show('settings'); }
 $('openSettings').onclick = openSettings;
@@ -330,6 +362,8 @@ $('keyWarnBtn').onclick = openSettings;
 function loadCfgUI(){
   for (const k of ['openaiKey','baseUrl','aiProvider','aiModel','claudeKey','lookback','lag']) $(k).value = cfg[k];
   $('volMark').checked = cfg.volMark; $('vibrate').checked = cfg.vibrate;
+  $('ttsEngine').value = cfg.ttsEngine; $('ttsVoiceEn').value = cfg.ttsVoiceEn; $('ttsVoiceZh').value = cfg.ttsVoiceZh; $('ttsModel').value = cfg.ttsModel;
+  syncTtsUI();
   $('claudeKeyWrap').hidden = cfg.aiProvider !== 'claude';
   $('settingsStatus').textContent = '';
 }
@@ -342,6 +376,7 @@ $('saveSettings').onclick = () => {
   cfg.lookback = parseFloat($('lookback').value) || 2.2;
   cfg.lag = parseFloat($('lag').value) || 0;
   cfg.volMark = $('volMark').checked; cfg.vibrate = $('vibrate').checked;
+  readTtsUI();
   cfg.baseUrl = (cfg.baseUrl || 'https://api.openai.com/v1').replace(/\/+$/,'');
   LS.set('lh:cfg', cfg);
   $('settingsStatus').className = 'status'; $('settingsStatus').textContent = '已保存';
@@ -400,21 +435,116 @@ window.onTtsReady = loadVoices;
 try{ loadVoices(); if (!NATIVE) speechSynthesis.onvoiceschanged = loadVoices; }catch(e){}
 $('voiceSel').onchange = e => LS.set('lh:voice', e.target.value);
 $('zhVoiceSel').onchange = e => LS.set('lh:zhvoice', e.target.value);
-function say(text, lang, rate, voiceName){
-  if (!text) return;
-  if (NATIVE){ native('speak', text, lang, rate, voiceName || ''); return; }
-  try{
-    speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    const v = speechSynthesis.getVoices().find(v => v.name === voiceName);
-    if (v){ u.voice = v; u.lang = v.lang; } else u.lang = lang;
-    u.rate = rate; speechSynthesis.speak(u);
-  }catch(e){}
+/* 两种发音引擎：
+   ai     —— OpenAI 语音合成（自然人声），生成后缓存在手机里，重复播放不再请求
+   system —— 手机系统的文字转语音（离线、免费，但机器感较重） */
+const ttsAudio = new Audio();
+let speakToken = 0, speakResolve = null;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const useAI = () => cfg.ttsEngine === 'ai' && !!cfg.openaiKey;
+const ttsInstr = {
+  en: 'Speak like a friendly native American English speaker in a relaxed, natural conversation. Use natural rhythm, linking and reductions; do not over-enunciate.',
+  zh: '用自然、亲切的普通话朗读，像老师在给学生解释意思，语速适中，不要播音腔。'
+};
+async function aiSpeechUrl(text, lang){
+  const voice = lang === 'zh' ? cfg.ttsVoiceZh : cfg.ttsVoiceEn;
+  const model = cfg.ttsModel || 'gpt-4o-mini-tts';
+  const key = [model, voice, lang, text].join('|');
+  let blob = await DB.get('tts', key).catch(() => null);
+  if (!blob){
+    const body = {model, voice, input:text, response_format:'mp3'};
+    if (/gpt-4o/.test(model)) body.instructions = ttsInstr[lang];
+    let r;
+    try{ r = await fetch(cfg.baseUrl + '/audio/speech', {method:'POST', headers:{'content-type':'application/json', Authorization:'Bearer '+cfg.openaiKey}, body:JSON.stringify(body)}); }
+    catch(e){ throw new Error(explainError(e)); }
+    if (!r.ok){ let j = {}; try{ j = await r.json(); }catch(e){} throw new Error(explainError(j.error?.message || r.statusText, r.status)); }
+    blob = await r.blob();
+    DB.put('tts', key, blob).catch(() => {});
+  }
+  return URL.createObjectURL(blob);
 }
-const speak = (text, rate = 0.9) => say(text, 'en-US', rate, $('voiceSel').value);
-const speakZh = text => say(text, 'zh-CN', 1, $('zhVoiceSel').value);
-function stopSpeak(){ if (NATIVE) native('stopSpeak'); else try{ speechSynthesis.cancel(); }catch(e){} }
-$('testVoice').onclick = () => { speak('Did you want to go to the store?'); setTimeout(() => speakZh('你想去商店吗？'), NATIVE ? 2600 : 2600); };
+function playUrl(url, rate, tok){
+  return new Promise(res => {
+    if (tok !== speakToken){ res(); return; }
+    speakResolve = res;
+    ttsAudio.onended = ttsAudio.onerror = () => { URL.revokeObjectURL(url); res(); };
+    ttsAudio.src = url;
+    ttsAudio.playbackRate = rate;
+    ttsAudio.play().catch(() => res());
+  });
+}
+/* 系统朗读一句，读完才返回（App 里由原生 onTtsDone 回调通知） */
+const ttsWaiters = {};
+window.onTtsDone = id => { const f = ttsWaiters[id]; if (f){ delete ttsWaiters[id]; f(); } };
+function systemSay(text, lang, rate, voiceName){
+  return new Promise(res => {
+    const safety = setTimeout(res, 4000 + text.length * 250);
+    const done = () => { clearTimeout(safety); res(); };
+    speakResolve = done;
+    if (NATIVE){
+      const id = 'u' + Date.now() + Math.random().toString(36).slice(2, 6);
+      ttsWaiters[id] = done;
+      native('speak', text, lang, rate, voiceName || '', id);
+      return;
+    }
+    try{
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      const v = speechSynthesis.getVoices().find(v => v.name === voiceName);
+      if (v){ u.voice = v; u.lang = v.lang; } else u.lang = lang;
+      u.rate = rate; u.onend = u.onerror = done;
+      speechSynthesis.speak(u);
+    }catch(e){ done(); }
+  });
+}
+/* 依次朗读几段，段与段之间停顿 gap 毫秒 */
+async function sayParts(parts, lang, rate, gap = 800){
+  parts = parts.filter(Boolean);
+  if (!parts.length) return;
+  stopSpeak();
+  const tok = ++speakToken;
+  for (let i = 0; i < parts.length; i++){
+    if (tok !== speakToken) return;
+    let spoken = false;
+    if (useAI()){
+      try{
+        const url = await aiSpeechUrl(parts[i], lang === 'zh-CN' ? 'zh' : 'en');
+        if (tok !== speakToken){ URL.revokeObjectURL(url); return; }
+        /* 生成的语音是正常语速，慢速时降低播放速度（保持音调） */
+        await playUrl(url, Math.min(1, rate / 0.9), tok); spoken = true;
+      }catch(e){ ttsNote('自然人声暂时不可用，已改用系统朗读：' + e.message); }
+    }
+    if (!spoken && tok === speakToken) await systemSay(parts[i], lang, rate, lang === 'zh-CN' ? $('zhVoiceSel').value : $('voiceSel').value);
+    if (i < parts.length - 1 && tok === speakToken) await sleep(gap);
+  }
+}
+function ttsNote(msg){ const st = view === 'drill' ? $('drillStatus') : view === 'review' ? $('reviewStatus') : $('settingsStatus'); if (st){ st.className = 'status err'; st.textContent = msg; } }
+const speak = (text, rate = 0.9) => sayParts([text], 'en-US', rate);
+const speakZh = parts => sayParts(Array.isArray(parts) ? parts : [parts], 'zh-CN', 1, 800);
+function stopSpeak(){
+  speakToken++;
+  try{ ttsAudio.pause(); }catch(e){}
+  if (speakResolve){ const f = speakResolve; speakResolve = null; f(); }
+  if (NATIVE) native('stopSpeak'); else try{ speechSynthesis.cancel(); }catch(e){}
+}
+/* 提前生成下一句要用的语音，点播放时不用等 */
+function prefetchTts(text, lang){ if (useAI() && text) aiSpeechUrl(text, lang).then(u => URL.revokeObjectURL(u)).catch(() => {}); }
+$('testVoice').onclick = async () => {
+  readTtsUI();
+  $('settingsStatus').className = 'status'; $('settingsStatus').textContent = cfg.ttsEngine === 'ai' ? '正在生成试听…' : '';
+  await sayParts(['Did you want to go to the store?'], 'en-US', 0.9);
+  if ($('settingsStatus').textContent === '正在生成试听…') $('settingsStatus').textContent = '';
+  await sleep(500);
+  await speakZh(['你想去商店吗', '你刚才是想去商店吗？']);
+};
+function readTtsUI(){
+  cfg.ttsEngine = $('ttsEngine').value; cfg.ttsVoiceEn = $('ttsVoiceEn').value; cfg.ttsVoiceZh = $('ttsVoiceZh').value;
+  cfg.ttsModel = $('ttsModel').value.trim() || 'gpt-4o-mini-tts';
+  if (!cfg.openaiKey) cfg.openaiKey = $('openaiKey').value.trim();
+  if (!cfg.baseUrl) cfg.baseUrl = 'https://api.openai.com/v1';
+}
+function syncTtsUI(){ const ai = $('ttsEngine').value === 'ai'; $('aiVoiceBox').hidden = !ai; $('sysVoiceBox').hidden = ai; }
+$('ttsEngine').onchange = syncTtsUI;
 
 /* ---------- 音频库 ---------- */
 let S = null, file = null, clip = null, showSubs = false, view = 'listen';
@@ -761,7 +891,7 @@ function renderAna(m){
   return `<div class="ana">
     ${a.phrase ? `<div><b>难点：</b>${esc(a.phrase)}${a.phrase_cn ? ` <span class="cnline">${esc(a.phrase_cn)}</span>` : ''}</div>` : ''}
     ${a.translation ? `<div class="tr">整句：${esc(a.translation)}</div>` : ''}
-    ${(a.phrase_cn || a.translation) ? `<div class="row"><button class="small" data-act="zh" data-w="${esc([a.phrase_cn, a.translation].filter(Boolean).join('。'))}">中文朗读</button></div>` : ''}
+    ${(a.phrase_cn || a.translation) ? `<div class="row"><button class="small" data-act="zh" data-id="${m.id}">中文朗读</button></div>` : ''}
     <div class="wl">${words}</div>
     ${a.sound ? `<div class="sound"><b>为什么难听懂：</b>${esc(a.sound)}</div>` : ''}
     ${a.tip ? `<div class="hint">练习建议：${esc(a.tip)}</div>` : ''}
@@ -790,7 +920,7 @@ function cardAction(el){
   }
   if (act === 'ana') analyze([m]);
   if (act === 'tts'){ stopClip(); speak(el.dataset.w, 0.8); }
-  if (act === 'zh'){ stopClip(); speakZh(el.dataset.w); }
+  if (act === 'zh'){ stopClip(); speakZh([m.ana?.phrase_cn, m.ana?.translation]); }
   if (act === 'wplay'){
     const target = norm(el.dataset.w);
     let i = m.idx.find(i => norm(S.words[i].w) === target);
@@ -912,6 +1042,7 @@ function renderDrill(){
     if (!x.m._busy && aiKey()) analyze([x.m]);
   } else $('drillCn').innerHTML = '';
   const text = groupText(x.m);
+  if (D.voice === 'tts') prefetchTts(text, 'en');
   t.className = 'hidden-text' + (D.reveal ? '' : ' masked');
   t.textContent = D.reveal ? text : text.split(' ').map(w => '•'.repeat(Math.min(w.length, 8))).join('  ');
   $('drillReveal').textContent = D.reveal ? '隐藏文字' : '显示文字';
@@ -929,7 +1060,7 @@ function drillGo(d){ if (!D.list.length) return; D.i = (D.i + d + D.list.length)
 function drillZh(){
   const x = D.list[D.i]; if (!x) return;
   const a = x.m.ana;
-  if (a && (a.phrase_cn || a.translation)){ stopClip(); speakZh([a.phrase_cn, a.translation].filter(Boolean).join('。')); }
+  if (a && (a.phrase_cn || a.translation)){ stopClip(); speakZh([a.phrase_cn, a.translation]); }
   else { $('drillStatus').textContent = '还没有中文翻译，正在生成…'; if (!x.m._busy) analyze([x.m]); }
 }
 $('drillPlay').onclick = () => drillPlay(false);
