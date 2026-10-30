@@ -24,6 +24,9 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.FileInputStream
+import java.net.HttpURLConnection
+import java.net.URL
+import java.util.concurrent.Executors
 import java.util.Locale
 
 /**
@@ -47,6 +50,8 @@ class MainActivity : Activity() {
     private var fileCallback: ValueCallback<Array<Uri>>? = null
     private var pendingShare: Pair<String, String>? = null
     private val sharedTypes = mutableMapOf<String, String>()
+    private val net = Executors.newFixedThreadPool(3)
+    private val dlTypes = mutableMapOf<String, String>()
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -76,6 +81,12 @@ class MainActivity : Activity() {
                     val f = File(File(cacheDir, "shared"), id)
                     if (!f.exists()) return null
                     return WebResourceResponse(sharedTypes[id] ?: "audio/mpeg", null, FileInputStream(f))
+                }
+                if (path.startsWith("/__dl/")) {
+                    val id = path.removePrefix("/__dl/")
+                    val f = File(File(cacheDir, "dl"), id)
+                    if (!f.exists()) return null
+                    return WebResourceResponse(dlTypes[id] ?: "audio/mpeg", null, FileInputStream(f))
                 }
                 val name = path.trimStart('/').ifEmpty { "index.html" }
                 return try {
@@ -189,6 +200,31 @@ class MainActivity : Activity() {
         intent.action = null
     }
 
+    /** 打开连接并手动跟随跳转（包括 http→https 的跳转） */
+    private fun openFollowing(start: String): HttpURLConnection {
+        var url = start
+        repeat(8) {
+            val c = URL(url).openConnection() as HttpURLConnection
+            c.instanceFollowRedirects = false
+            c.connectTimeout = 15000
+            c.readTimeout = 30000
+            c.setRequestProperty("User-Agent", "TingDian/1.0 (Android podcast reader)")
+            c.setRequestProperty("Accept", "*/*")
+            val code = c.responseCode
+            if (code in 300..399) {
+                val loc = c.getHeaderField("Location") ?: throw Exception("跳转地址为空")
+                url = URL(URL(url), loc).toString()
+                c.disconnect()
+            } else {
+                if (code >= 400) { c.disconnect(); throw Exception("HTTP $code") }
+                return c
+            }
+        }
+        throw Exception("跳转次数太多")
+    }
+
+    private fun js(code: String) = runOnUiThread { web.evaluateJavascript(code, null) }
+
     /** 一段朗读结束，通知网页（用来在意群和整句之间停顿） */
     private fun notifyDone(id: String?) {
         id ?: return
@@ -275,6 +311,60 @@ class MainActivity : Activity() {
                     engine.setSpeechRate(rate)
                     engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, id)
                 } catch (_: Exception) { notifyDone(id) }
+            }
+        }
+
+        /** 抓取订阅源（网页直接请求会被跨域拦截，交给原生来做） */
+        @JavascriptInterface
+        fun fetchText(url: String, cb: String) {
+            net.execute {
+                try {
+                    val c = openFollowing(url)
+                    val text = c.inputStream.use { it.readBytes().toString(Charsets.UTF_8) }
+                    c.disconnect()
+                    js("window.onNativeFetch && onNativeFetch(${JSONObject.quote(cb)}, true, ${JSONObject.quote(text)})")
+                } catch (e: Exception) {
+                    js("window.onNativeFetch && onNativeFetch(${JSONObject.quote(cb)}, false, ${JSONObject.quote(e.message ?: e.toString())})")
+                }
+            }
+        }
+
+        /** 下载一期节目的音频到缓存，下载完挂到 https://HOST/__dl/<id>，网页再读成文件 */
+        @JavascriptInterface
+        fun download(url: String, cb: String) {
+            net.execute {
+                try {
+                    val dir = File(cacheDir, "dl").apply { mkdirs() }
+                    // 只保留最近几个缓存文件
+                    dir.listFiles()?.sortedBy { it.lastModified() }?.dropLast(3)?.forEach { it.delete() }
+                    val id = System.currentTimeMillis().toString()
+                    val out = File(dir, id)
+                    val c = openFollowing(url)
+                    val total = c.contentLengthLong
+                    dlTypes[id] = c.contentType?.substringBefore(';')?.trim() ?: "audio/mpeg"
+                    var done = 0L
+                    var lastReport = 0L
+                    c.inputStream.use { input ->
+                        out.outputStream().use { o ->
+                            val buf = ByteArray(64 * 1024)
+                            while (true) {
+                                val n = input.read(buf)
+                                if (n < 0) break
+                                o.write(buf, 0, n)
+                                done += n
+                                val now = System.currentTimeMillis()
+                                if (now - lastReport > 300) {
+                                    lastReport = now
+                                    js("window.onNativeProgress && onNativeProgress(${JSONObject.quote(cb)}, $done, $total)")
+                                }
+                            }
+                        }
+                    }
+                    c.disconnect()
+                    js("window.onNativeDownload && onNativeDownload(${JSONObject.quote(cb)}, true, ${JSONObject.quote("https://$HOST/__dl/$id")}, ${JSONObject.quote(dlTypes[id] ?: "")})")
+                } catch (e: Exception) {
+                    js("window.onNativeDownload && onNativeDownload(${JSONObject.quote(cb)}, false, ${JSONObject.quote(e.message ?: e.toString())}, \"\")")
+                }
             }
         }
 

@@ -57,6 +57,24 @@ button:active{filter:brightness(.95)}
 .item .meta .warn{color:var(--mark);font-weight:600}
 .item .del{grid-row:1 / span 2;grid-column:2;min-height:36px;padding:6px 10px;font-size:13px;color:var(--muted)}
 .item.busy{border-color:var(--accent)}
+.daily{display:grid;gap:10px}
+.sechead{display:flex;align-items:center;gap:8px;margin-top:6px}
+.sechead h2{flex:1}
+.chips{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;min-height:34px;padding:4px 12px;border-radius:999px;font-size:13px;white-space:nowrap}
+.chip .stale{font-size:11px;color:var(--muted);margin-left:4px}
+.chip.on .stale{color:inherit;opacity:.8}
+.eps{display:grid;gap:8px}
+.ep{display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 14px;text-align:left;width:100%}
+.ep .t{font-weight:600;line-height:1.4;overflow-wrap:anywhere}
+.ep .m{font-size:12px;color:var(--muted);display:flex;gap:8px;flex-wrap:wrap}
+.ep .tag{grid-row:1 / span 2;grid-column:2;font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;background:var(--mark-soft);color:var(--mark);white-space:nowrap}
+.ep .tag.doneTag{background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent)}
+.ep.busy{border-color:var(--accent)}
+.feedrow{display:grid;grid-template-columns:1fr auto;gap:2px 8px;align-items:center;border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+.feedrow .u{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.feedrow button{grid-row:1 / span 2;grid-column:2;min-height:34px;padding:4px 10px;font-size:13px}
 
 /* workspace */
 .work{padding-bottom:calc(var(--nav-h) + env(safe-area-inset-bottom,0px) + 16px)}
@@ -144,6 +162,25 @@ button:active{filter:brightness(.95)}
     <span class="status">转写字幕用 OpenAI Whisper，需要你自己的 OpenAI API Key。</span>
     <button class="primary" id="keyWarnBtn">去设置</button>
   </div>
+  <section class="daily">
+    <div class="sechead">
+      <h2>每日更新</h2>
+      <button class="small" id="manageFeeds">管理订阅</button>
+      <button class="small" id="refreshFeeds">刷新</button>
+    </div>
+    <div class="chips" id="feedChips"></div>
+    <span class="status" id="feedStatus"></span>
+    <div class="eps" id="eps"></div>
+    <div class="panel" id="feedPanel" hidden>
+      <h2>我的订阅</h2>
+      <div id="feedList" style="display:grid;gap:8px"></div>
+      <label class="f">添加播客订阅地址（RSS）<input type="text" id="feedUrl" placeholder="https://…/feed.xml" autocomplete="off" inputmode="url"></label>
+      <div class="grid2"><button class="primary" id="addFeed">添加</button><button id="restoreFeeds">恢复内置订阅</button></div>
+      <span class="hint">在苹果播客、小宇宙或 Podnews 上搜到节目后，复制它的 RSS 地址粘贴到这里。</span>
+    </div>
+  </section>
+
+  <div class="sechead"><h2>我的音频</h2></div>
   <button class="import" id="importBtn"><b>＋ 导入英语音频</b><span class="hint">mp3 / m4a / wav，≤ 25MB · 也可以在其他 App 里“分享”音频到听点</span></button>
   <input type="file" id="fileInput" accept="audio/*,video/mp4,video/webm" hidden>
   <span class="status" id="homeStatus"></span>
@@ -347,7 +384,7 @@ function goBack(){
   if (screen === 'settings'){ show(prevScreen || 'home'); if (prevScreen !== 'work') renderLib(); return true; }
   if (screen === 'work'){
     if (view !== 'listen'){ setView('listen'); return true; }
-    show('home'); renderLib(); return true;
+    show('home'); renderLib(); refreshFeeds(false); return true;
   }
   return false;
 }
@@ -560,14 +597,15 @@ async function renderLib(){
   let list = [];
   try{ list = await DB.all('sess'); }catch(e){ $('homeStatus').textContent = '无法读取本地存储：' + e.message; }
   list.sort((a,b) => (b.lastOpened||b.added||0) - (a.lastOpened||a.added||0));
-  if (!list.length){ $('lib').innerHTML = '<div class="empty">还没有音频。导入一段英语音频开始第一轮盲听。</div>'; return; }
+  sessIndex = new Map(list.map(s => [s.key, s])); renderEps();
+  if (!list.length){ $('lib').innerHTML = '<div class="empty">还没有音频。从上面的每日更新里选一期，或者导入自己的音频。</div>'; return; }
   $('lib').innerHTML = list.map(s => {
     const all = [...(s.history||[]).flatMap(h => h.marks||[]), ...(s.marks||[])];
     const undone = all.filter(m => !m.done).length;
     let meta;
     if (busy.has(s.key)) meta = '<span>正在转写…</span>';
     else if (!s.words?.length) meta = `<span class="warn">${s.err ? '转写失败，点开重试' : '还没转写，点开开始'}</span>`;
-    else meta = `<span>${fmt(s.duration).slice(0,5)}</span><span>第 ${s.round} 轮</span>${undone ? `<span class="warn">${undone} 处未熟悉</span>` : '<span>没有待练难点</span>'}`;
+    else meta = (s.source ? `<span>${esc(s.source)}</span>` : '') + `<span>${fmt(s.duration).slice(0,5)}</span><span>第 ${s.round} 轮</span>${undone ? `<span class="warn">${undone} 处未熟悉</span>` : '<span>没有待练难点</span>'}`;
     return `<div class="item${busy.has(s.key)?' busy':''}" data-key="${esc(s.key)}" role="button" tabindex="0">
       <span class="name">${esc(s.name)}</span>
       <button class="del" data-del="${esc(s.key)}">删除</button>
@@ -596,15 +634,15 @@ window.onSharedAudio = async (url, name) => {
   }catch(e){ $('homeStatus').textContent = '读取分享的音频失败：' + e.message; }
 };
 
-async function importFile(f){
+async function importFile(f, opts = {}){
   if (!f) return;
   show('home');
   const st = $('homeStatus'); st.className = 'status';
   if (f.size > 25*1048576){ st.className = 'status err'; st.textContent = `${f.name} 有 ${(f.size/1048576).toFixed(1)}MB，超过 Whisper 的 25MB 上限，请先压缩或剪短`; return; }
-  const key = f.name + '|' + f.size;
+  const key = opts.key || (f.name + '|' + f.size);
   let s = await DB.get('sess', key);
   await DB.put('audio', key, f);
-  if (!s){ s = {key, name:f.name, size:f.size, added:Date.now(), marks:[], round:1, history:[]}; await DB.put('sess', key, s); }
+  if (!s){ s = {key, name:opts.name || f.name, size:f.size, added:Date.now(), marks:[], round:1, history:[], source:opts.source || '', note:opts.note || ''}; await DB.put('sess', key, s); }
   st.textContent = '';
   if (s.words?.length) return openSession(key);
   transcribe(key);
@@ -655,6 +693,205 @@ async function openSession(key){
   S = s; S.lastOpened = Date.now(); save();
   openWorkspace();
 }
+
+/* ---------- 每日更新：播客订阅 ---------- */
+const DEFAULT_FEEDS = [
+  {id:'send',  title:'Simple English News Daily', note:'慢速新闻 · 工作日更新', url:'https://www.spreaker.com/show/4907677/episodes/feed'},
+  {id:'bbc6',  title:'BBC 6 Minute English',      note:'英式对话 · 每周',     url:'https://podcasts.files.bbci.co.uk/p02pc9tn.rss'},
+  {id:'bbcc',  title:'BBC Learning English Conversations', note:'地道表达 · 每周', url:'https://podcasts.files.bbci.co.uk/p02pc9zn.rss'},
+  {id:'npr',   title:'NPR News Now',              note:'正常语速新闻 · 每小时', url:'https://feeds.npr.org/500005/podcast.xml'},
+  {id:'voa',   title:'VOA Learning English',      note:'慢速 · 旧节目库',      url:'https://learningenglish.voanews.com/podcast/?count=30&zoneId=1689'},
+  {id:'voaai', title:'VOA As It Is',              note:'慢速新闻 · 旧节目库',  url:'https://learningenglish.voanews.com/podcast/?count=30&zoneId=3521'},
+];
+let feeds = LS.get('lh:feeds', null) || DEFAULT_FEEDS.map(f => ({...f}));
+let feedCache = LS.get('lh:feedcache', {});
+let feedFilter = LS.get('lh:feedfilter', 'all');
+let sessIndex = new Map();
+const epBusy = {};
+const STALE_DAYS = 120;
+const saveFeeds = () => LS.set('lh:feeds', feeds);
+
+/* 原生桥：抓取文本 / 下载文件（浏览器里直接用 fetch，可能被跨域拦截） */
+const nativeCbs = {};
+const cbId = () => 'c' + Date.now() + Math.random().toString(36).slice(2,7);
+window.onNativeFetch = (id, ok, data) => { const c = nativeCbs[id]; if (c){ delete nativeCbs[id]; ok ? c.res(data) : c.rej(new Error(data)); } };
+window.onNativeProgress = (id, done, total) => { const c = nativeCbs[id]; if (c && c.prog) c.prog(done, total); };
+window.onNativeDownload = (id, ok, data, mime) => { const c = nativeCbs[id]; if (c){ delete nativeCbs[id]; ok ? c.res({url:data, mime}) : c.rej(new Error(data)); } };
+function getText(url){
+  if (NATIVE && window.Android.fetchText) return new Promise((res, rej) => { const id = cbId(); nativeCbs[id] = {res, rej}; native('fetchText', url, id); });
+  return fetch(url).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); });
+}
+async function getBlob(url, prog){
+  if (NATIVE && window.Android.download){
+    const r = await new Promise((res, rej) => { const id = cbId(); nativeCbs[id] = {res, rej, prog}; native('download', url, id); });
+    const b = await (await fetch(r.url)).blob();
+    return b.type ? b : new Blob([b], {type: r.mime || 'audio/mpeg'});
+  }
+  const r = await fetch(url); if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.blob();
+}
+
+function parseDuration(v){
+  if (!v) return 0;
+  if (/^\d+$/.test(v)) return +v;
+  return v.split(':').reduce((a, x) => a * 60 + (+x || 0), 0);
+}
+function parseFeed(xml){
+  const doc = new DOMParser().parseFromString(xml, 'text/xml');
+  if (doc.querySelector('parsererror')) throw new Error('不是有效的 RSS 订阅地址');
+  const ch = doc.querySelector('channel');
+  if (!ch) throw new Error('不是播客订阅（RSS）');
+  const txt = (el, tag) => { const n = [...el.children].find(c => c.tagName === tag || c.localName === tag && tag.indexOf(':') < 0); return n ? n.textContent.trim() : ''; };
+  const items = [...ch.getElementsByTagName('item')].map(it => {
+    const enc = it.getElementsByTagName('enclosure')[0];
+    if (!enc || !enc.getAttribute('url')) return null;
+    const d = new Date(txt(it, 'pubDate'));
+    return {
+      guid: txt(it, 'guid') || enc.getAttribute('url'),
+      title: txt(it, 'title') || '未命名',
+      date: isNaN(d) ? 0 : d.getTime(),
+      url: enc.getAttribute('url'),
+      size: +enc.getAttribute('length') || 0,
+      type: enc.getAttribute('type') || '',
+      dur: parseDuration(txt(it, 'itunes:duration')),
+    };
+  }).filter(Boolean).sort((a,b) => b.date - a.date).slice(0, 30);
+  return {title: txt(ch, 'title'), items};
+}
+async function refreshFeed(f){
+  const data = parseFeed(await getText(f.url));
+  feedCache[f.id] = {fetched: Date.now(), items: data.items, err: null};
+  if (!f.title && data.title) { f.title = data.title; saveFeeds(); }
+  return data;
+}
+let refreshing = false;
+async function refreshFeeds(force){
+  if (refreshing) return;
+  const due = feeds.filter(f => force || !feedCache[f.id] || Date.now() - feedCache[f.id].fetched > 3*3600e3);
+  if (!due.length){ renderEps(); return; }
+  refreshing = true;
+  $('feedStatus').className = 'status'; $('feedStatus').textContent = '正在获取最新节目…';
+  let fails = 0;
+  await Promise.all(due.map(f => refreshFeed(f).catch(e => { fails++; feedCache[f.id] = Object.assign(feedCache[f.id] || {items:[]}, {err: e.message, fetched: Date.now()}); })));
+  LS.set('lh:feedcache', feedCache);
+  refreshing = false;
+  $('feedStatus').textContent = fails ? `${fails} 个订阅获取失败，可以稍后点“刷新”重试` : '';
+  renderEps();
+}
+const isStale = f => { const c = feedCache[f.id]; const t = c?.items?.[0]?.date; return !!(t && Date.now() - t > STALE_DAYS * 864e5); };
+function relDate(t){
+  if (!t) return '';
+  const d = Math.floor((Date.now() - t) / 864e5);
+  if (d <= 0){ const h = Math.max(1, Math.floor((Date.now() - t) / 3600e3)); return h < 24 ? `${h} 小时前` : '今天'; }
+  if (d === 1) return '昨天';
+  if (d < 7) return `${d} 天前`;
+  const x = new Date(t); return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`;
+}
+const epKey = (f, it) => 'ep|' + f.id + '|' + it.guid;
+function renderEps(){
+  if (!feeds.some(f => f.id === feedFilter)) feedFilter = 'all';
+  $('feedChips').innerHTML = `<button class="chip${feedFilter==='all'?' on':''}" data-f="all">最新</button>` +
+    feeds.map(f => `<button class="chip${feedFilter===f.id?' on':''}" data-f="${esc(f.id)}">${esc(f.title || '订阅')}${isStale(f) ? '<span class="stale">已停更</span>' : feedCache[f.id]?.err && !feedCache[f.id]?.items?.length ? '<span class="stale">获取失败</span>' : ''}</button>`).join('');
+  let rows = [];
+  if (feedFilter === 'all'){
+    for (const f of feeds) if (!isStale(f)) for (const it of (feedCache[f.id]?.items || []).slice(0, 4)) rows.push({f, it});
+    rows.sort((a,b) => b.it.date - a.it.date); rows = rows.slice(0, 12);
+  } else {
+    const f = feeds.find(f => f.id === feedFilter);
+    rows = (feedCache[f.id]?.items || []).map(it => ({f, it}));
+  }
+  if (!rows.length){
+    const f = feeds.find(f => f.id === feedFilter);
+    const err = f && feedCache[f.id]?.err;
+    $('eps').innerHTML = `<div class="empty">${refreshing ? '正在获取…' : err ? '获取失败：' + esc(err) : '还没有节目，点“刷新”获取。'}</div>`;
+    return;
+  }
+  $('eps').innerHTML = rows.map(({f, it}) => {
+    const k = epKey(f, it), s = sessIndex.get(k), b = epBusy[k];
+    let tag = '<span class="tag">新</span>';
+    if (b) tag = `<span class="tag">${esc(b)}</span>`;
+    else if (s?.words?.length){
+      const left = [...(s.history||[]).flatMap(h => h.marks||[]), ...(s.marks||[])].filter(m => !m.done).length;
+      tag = `<span class="tag doneTag">第 ${s.round} 轮${left ? ' · ' + left + ' 处' : ''}</span>`;
+    } else if (s) tag = '<span class="tag">待转写</span>';
+    const mins = it.dur ? Math.round(it.dur / 60) + ' 分钟' : '';
+    return `<button class="ep${b ? ' busy' : ''}" data-f="${esc(f.id)}" data-g="${esc(it.guid)}">
+      <span class="t">${esc(it.title)}</span>${tag}
+      <span class="m">${feedFilter === 'all' ? `<span>${esc(f.title)}</span>` : ''}<span>${relDate(it.date)}</span>${mins ? `<span>${mins}</span>` : ''}</span></button>`;
+  }).join('');
+}
+$('feedChips').onclick = e => { const c = e.target.closest('[data-f]'); if (!c) return; feedFilter = c.dataset.f; LS.set('lh:feedfilter', feedFilter); renderEps(); };
+$('refreshFeeds').onclick = () => refreshFeeds(true);
+$('eps').onclick = e => {
+  const b = e.target.closest('.ep'); if (!b) return;
+  const f = feeds.find(f => f.id === b.dataset.f); const it = (feedCache[f.id]?.items || []).find(i => i.guid === b.dataset.g);
+  if (f && it) openEpisode(f, it);
+};
+async function openEpisode(f, it){
+  const k = epKey(f, it);
+  if (epBusy[k]) return;
+  const s = sessIndex.get(k);
+  if (s && await DB.get('audio', k)) return openSession(k);
+  if (!cfg.openaiKey){ $('feedStatus').className = 'status err'; $('feedStatus').textContent = '请先在设置里填写 OpenAI API Key，转写需要用到'; return; }
+  epBusy[k] = '下载中'; renderEps();
+  $('feedStatus').className = 'status'; $('feedStatus').textContent = `正在下载「${it.title}」…`;
+  try{
+    let blob = await getBlob(it.url, (done, total) => {
+      epBusy[k] = total > 0 ? `下载 ${Math.round(done / total * 100)}%` : `下载 ${(done/1048576).toFixed(1)}MB`;
+      renderEps();
+    });
+    let note = '';
+    const LIMIT = 24 * 1048576;
+    if (blob.size > LIMIT){
+      /* 超过 Whisper 上限：mp3 可以直接按字节截取前一段 */
+      if (/mpeg|mp3/i.test(blob.type || it.type) || /\.mp3(\?|$)/i.test(it.url)){
+        const keep = LIMIT / blob.size;
+        note = it.dur ? `节目较长，只截取了前 ${Math.floor(it.dur * keep / 60)} 分钟` : '节目较长，只截取了前一部分';
+        blob = blob.slice(0, LIMIT, 'audio/mpeg');
+      } else throw new Error(`这一期有 ${(blob.size/1048576).toFixed(0)}MB，超过转写上限 25MB`);
+    }
+    const ext = /mp4|m4a|aac/i.test(blob.type) ? 'm4a' : /wav/i.test(blob.type) ? 'wav' : 'mp3';
+    const file = new File([blob], `episode.${ext}`, {type: blob.type || 'audio/mpeg'});
+    delete epBusy[k];
+    $('feedStatus').textContent = note;
+    await importFile(file, {key:k, name:it.title, source:f.title, note});
+  }catch(err){
+    delete epBusy[k];
+    $('feedStatus').className = 'status err'; $('feedStatus').textContent = '下载失败：' + err.message;
+    renderEps();
+  }
+}
+
+/* 订阅管理 */
+$('manageFeeds').onclick = () => { $('feedPanel').hidden = !$('feedPanel').hidden; renderFeedList(); };
+function renderFeedList(){
+  $('feedList').innerHTML = feeds.map(f => `<div class="feedrow"><b>${esc(f.title || '订阅')}${f.note ? ` <span class="hint">${esc(f.note)}</span>` : ''}</b><button data-rm="${esc(f.id)}">移除</button><span class="u">${esc(f.url)}</span></div>`).join('') || '<div class="hint">还没有订阅</div>';
+}
+$('feedList').onclick = e => {
+  const b = e.target.closest('[data-rm]'); if (!b) return;
+  feeds = feeds.filter(f => f.id !== b.dataset.rm); saveFeeds(); renderFeedList(); renderEps();
+};
+$('restoreFeeds').onclick = () => {
+  for (const d of DEFAULT_FEEDS) if (!feeds.some(f => f.id === d.id)) feeds.push({...d});
+  saveFeeds(); renderFeedList(); refreshFeeds(false);
+};
+$('addFeed').onclick = async () => {
+  const url = $('feedUrl').value.trim();
+  const st = $('feedStatus');
+  if (!/^https?:\/\//i.test(url)){ st.className = 'status err'; st.textContent = '请粘贴以 http 开头的订阅地址'; return; }
+  if (feeds.some(f => f.url === url)){ st.className = 'status'; st.textContent = '已经订阅过了'; return; }
+  st.className = 'status'; st.textContent = '正在检查订阅地址…';
+  const f = {id: 'u' + Date.now(), title: '', note: '自定义', url};
+  try{
+    const data = await refreshFeed(f);
+    if (!data.items.length) throw new Error('这个订阅里没有音频节目');
+    f.title = data.title || '自定义订阅';
+    feeds.push(f); saveFeeds(); LS.set('lh:feedcache', feedCache);
+    $('feedUrl').value = ''; feedFilter = f.id; LS.set('lh:feedfilter', feedFilter);
+    st.textContent = `已添加「${f.title}」`;
+    renderFeedList(); renderEps();
+  }catch(e){ st.className = 'status err'; st.textContent = '添加失败：' + e.message; }
+};
 
 /* ---------- 练习界面 ---------- */
 let reviewRound = 1;
@@ -1100,6 +1337,8 @@ $('markHint').textContent = cfg.volMark && NATIVE ? '也可以按音量键' : '�
 if (!NATIVE) $('volMark').closest('label').hidden = true;
 document.addEventListener('visibilitychange', () => { if (document.hidden){ audio.pause(); stopSpeak(); } });
 renderLib();
+renderEps();
+refreshFeeds(false);
 native('ready');
 </script>
 </body>
