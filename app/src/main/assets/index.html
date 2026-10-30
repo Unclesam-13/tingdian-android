@@ -418,7 +418,7 @@ $('saveSettings').onclick = () => {
   LS.set('lh:cfg', cfg);
   $('settingsStatus').className = 'status'; $('settingsStatus').textContent = '已保存';
   $('keyWarn').hidden = !!cfg.openaiKey;
-  $('markHint').textContent = cfg.volMark && NATIVE ? '也可以按音量键' : '听不懂的地方立刻按';
+  $('markHint').textContent = cfg.volMark && NATIVE ? '也可以按音量键' : matchMedia('(hover:hover)').matches ? '也可以按空格键' : '听不懂的地方立刻按';
 };
 
 function explainError(err, status){
@@ -758,8 +758,23 @@ function parseFeed(xml){
   }).filter(Boolean).sort((a,b) => b.date - a.date).slice(0, 30);
   return {title: txt(ch, 'title'), items};
 }
+/* 网页版：内置订阅由 GitHub Actions 定时镜像到同一站点（feeds/*.json + audio/），绕开跨域限制 */
+const WEB = !NATIVE && /^https?:$/.test(location.protocol);
+let mirrorP = null;
+const mirror = () => mirrorP || (mirrorP = WEB ? fetch('feeds/index.json', {cache:'no-store'}).then(r => r.ok ? r.json() : null).catch(() => null) : Promise.resolve(null));
 async function refreshFeed(f){
-  const data = parseFeed(await getText(f.url));
+  const m = await mirror();
+  if (m && m.feeds && m.feeds[f.id]){
+    if (m.feeds[f.id].err) throw new Error(m.feeds[f.id].err);
+    const j = await (await fetch(`feeds/${f.id}.json`, {cache:'no-store'})).json();
+    const items = j.items.map(it => it.local ? {...it, url: it.local, cached: true} : {...it, cached: false});
+    feedCache[f.id] = {fetched: Date.now(), items, err: null, mirrored: true};
+    return {title: j.title, items};
+  }
+  let xml;
+  try{ xml = await getText(f.url); }
+  catch(e){ throw new Error(NATIVE ? e.message : '浏览器不允许网页直接读取这个订阅（跨域限制），请在安卓 App 里添加'); }
+  const data = parseFeed(xml);
   feedCache[f.id] = {fetched: Date.now(), items: data.items, err: null};
   if (!f.title && data.title) { f.title = data.title; saveFeeds(); }
   return data;
@@ -809,6 +824,7 @@ function renderEps(){
   $('eps').innerHTML = rows.map(({f, it}) => {
     const k = epKey(f, it), s = sessIndex.get(k), b = epBusy[k];
     let tag = '<span class="tag">新</span>';
+    if (!NATIVE && feedCache[f.id]?.mirrored && !it.cached && !s) tag = '<span class="tag doneTag" style="opacity:.6">仅 App</span>';
     if (b) tag = `<span class="tag">${esc(b)}</span>`;
     else if (s?.words?.length){
       const left = [...(s.history||[]).flatMap(h => h.marks||[]), ...(s.marks||[])].filter(m => !m.done).length;
@@ -832,6 +848,7 @@ async function openEpisode(f, it){
   if (epBusy[k]) return;
   const s = sessIndex.get(k);
   if (s && await DB.get('audio', k)) return openSession(k);
+  if (!NATIVE && feedCache[f.id]?.mirrored && !it.cached){ $('feedStatus').className = 'status'; $('feedStatus').textContent = '网页版只能下载每个订阅最近几期，更早的节目请在安卓 App 里打开'; return; }
   if (!cfg.openaiKey){ $('feedStatus').className = 'status err'; $('feedStatus').textContent = '请先在设置里填写 OpenAI API Key，转写需要用到'; return; }
   epBusy[k] = '下载中'; renderEps();
   $('feedStatus').className = 'status'; $('feedStatus').textContent = `正在下载「${it.title}」…`;
@@ -1333,7 +1350,7 @@ $('relisten').onclick = () => {
 };
 
 /* ---------- 启动 ---------- */
-$('markHint').textContent = cfg.volMark && NATIVE ? '也可以按音量键' : '听不懂的地方立刻按';
+$('markHint').textContent = cfg.volMark && NATIVE ? '也可以按音量键' : matchMedia('(hover:hover)').matches ? '也可以按空格键' : '听不懂的地方立刻按';
 if (!NATIVE) $('volMark').closest('label').hidden = true;
 document.addEventListener('visibilitychange', () => { if (document.hidden){ audio.pause(); stopSpeak(); } });
 renderLib();
