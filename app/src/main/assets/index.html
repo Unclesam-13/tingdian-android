@@ -80,7 +80,7 @@ button:active{filter:brightness(.95)}
 .work{padding-bottom:calc(var(--nav-h) + env(safe-area-inset-bottom,0px) + 16px)}
 .stats{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--muted)}
 .stats b{font:700 18px var(--f-display);color:var(--ink);margin-right:3px}
-.nav{position:fixed;left:0;right:0;bottom:0;z-index:20;display:grid;grid-template-columns:repeat(3,1fr);background:var(--panel);border-top:1px solid var(--line);padding:0 max(0px,env(safe-area-inset-right,0px)) env(safe-area-inset-bottom,0px) max(0px,env(safe-area-inset-left,0px))}
+.nav{position:fixed;left:0;right:0;bottom:0;z-index:20;display:grid;grid-template-columns:repeat(4,1fr);background:var(--panel);border-top:1px solid var(--line);padding:0 max(0px,env(safe-area-inset-right,0px)) env(safe-area-inset-bottom,0px) max(0px,env(safe-area-inset-left,0px))}
 .nav button{border:none;border-radius:0;background:transparent;min-height:var(--nav-h);display:grid;place-items:center;gap:0;font-size:13px;color:var(--muted);padding:6px 4px}
 .nav button .ico{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .nav button.on{color:var(--accent);font-weight:700;background:transparent}
@@ -109,6 +109,41 @@ button:active{filter:brightness(.95)}
 .transcript.mode-en .cn{display:none}
 .transcript.mode-cn .en{display:none}
 .transcript.mode-cn .cn{color:var(--ink);font-size:15px}
+
+/* fine listening (分段精听) */
+.parts{display:flex;gap:6px;overflow-x:auto;padding:2px 0 4px;scrollbar-width:none}
+.parts::-webkit-scrollbar{display:none}
+.pchip{flex:none;min-width:44px;min-height:40px;padding:4px 8px;border-radius:10px;font:600 14px var(--f-mono);display:grid;place-items:center;line-height:1.1}
+.pchip small{font:500 10px var(--f-body);color:var(--muted)}
+.pchip.done{border-color:var(--accent);color:var(--accent)}
+.pchip.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.pchip.on small{color:inherit;opacity:.85}
+.pchip .dot{color:var(--mark)}
+.fhead{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.fhead .where{font-weight:700;flex:1;min-width:0}
+.fhead select{width:auto;min-height:36px;padding:4px 8px;font-size:14px}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.steps span{text-align:center;font-size:13px;padding:8px 4px;color:var(--muted);border-right:1px solid var(--line)}
+.steps span:last-child{border-right:none}
+.steps span.on{background:var(--accent);color:var(--accent-ink);font-weight:700}
+.steps span.ok{color:var(--accent)}
+.slist{display:grid;gap:6px}
+.sl{display:grid;grid-template-columns:auto 1fr;gap:8px;align-items:baseline;padding:8px 10px;border-radius:10px;background:var(--bg);border:1px solid transparent;text-align:left;width:100%;min-height:0;font-size:15px}
+.sl .n{font:600 12px var(--f-mono);color:var(--muted)}
+.sl .tx{min-width:0;overflow-wrap:anywhere;line-height:1.7}
+.sl .tx.masked{color:var(--muted);letter-spacing:.12em}
+.sl .cn{grid-column:2;font-size:13px;color:var(--muted)}
+.sl.now{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,var(--bg))}
+.sl .hm{color:var(--mark);font-size:12px;font-weight:600}
+.sent{display:grid;gap:8px;text-align:center;padding:10px 4px;min-height:120px;align-content:center}
+.sent .tx{font:600 22px/1.6 var(--f-display);overflow-wrap:anywhere}
+.sent .tx.masked{color:var(--muted);letter-spacing:.16em;font-weight:500}
+.sent .tx .w{cursor:pointer}
+.sent .tx .w.sel{background:var(--sel)}
+.sent .cn{color:var(--accent);font-size:16px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.grid3 button{min-height:50px}
+.markbtn.slim{min-height:clamp(90px,15vh,140px);font-size:26px}
 
 /* drill */
 .drill{display:grid;gap:14px}
@@ -284,9 +319,31 @@ button:active{filter:brightness(.95)}
     <span class="status" id="listenStatus">按 ▶ 开始盲听，听不懂就按下面的大按钮。</span>
     <div class="grid2">
       <button id="clearMarks">清空本轮标记</button>
-      <button class="primary" id="toDrill">听完了，练意群</button>
+      <button class="primary" id="toDrill">听完了，分段精听</button>
     </div>
     <div class="markwrap"><button class="markbtn" id="markBtn">听不懂<small id="markHint">也可以按音量键</small></button></div>
+  </section>
+
+  <!-- 分段精听 -->
+  <section id="fineView" hidden style="display:grid;gap:12px">
+    <div class="fhead">
+      <span class="where" id="fWhere">第 1 段</span>
+      <label class="row" style="gap:6px;font-size:13px;color:var(--muted)">每段<select id="fSize"></select>句</label>
+    </div>
+    <div class="parts" id="fParts"></div>
+    <div class="steps" id="fSteps"><span data-s="part">① 整段听</span><span data-s="sent">② 逐句听</span><span data-s="again">③ 整段复听</span></div>
+    <div class="grid3">
+      <button class="primary" id="fPlay">▶ 播放</button>
+      <button id="fSlow">慢速</button>
+      <button id="fReveal">显示原文</button>
+    </div>
+    <span class="status" id="fStatus" style="text-align:center"></span>
+    <div class="panel" id="fBody" style="gap:12px"></div>
+    <div class="grid2">
+      <button id="fPrev">‹ 上一句</button>
+      <button class="primary" id="fNext">下一句 ›</button>
+    </div>
+    <div class="markwrap"><button class="markbtn slim" id="fMark">听不懂<small id="fMarkHint">标记这一句里没听懂的地方</small></button></div>
   </section>
 
   <!-- 意群练习 -->
@@ -334,6 +391,7 @@ button:active{filter:brightness(.95)}
 
   <nav class="nav" id="nav">
     <button id="tabListen" class="on"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="14" width="4" height="7" rx="1.5"/><rect x="17" y="14" width="4" height="7" rx="1.5"/></svg>盲听</button>
+    <button id="tabFine"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16"/><path d="M4 12h10"/><path d="M4 18h13"/><circle cx="19" cy="12" r="1.6"/></svg>分段精听</button>
     <button id="tabDrill"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M17 2l3 3-3 3"/><path d="M4 11V9a4 4 0 0 1 4-4h12"/><path d="M7 22l-3-3 3-3"/><path d="M20 13v2a4 4 0 0 1-4 4H4"/></svg><span>意群练习<span class="cnt" id="reviewCount" hidden></span></span></button>
     <button id="tabReview"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6a3 3 0 0 1 2 1v15a3 3 0 0 0-2-1H4z"/><path d="M20 4h-6a3 3 0 0 0-2 1v15a3 3 0 0 1 2-1h6z"/></svg>复习难点</button>
   </nav>
@@ -922,27 +980,31 @@ function openWorkspace(){
 }
 function setView(v){
   view = v; stopClip(); stopSpeak();
-  for (const k of ['listen','review','drill']){
+  for (const k of ['listen','fine','review','drill']){
     $(k+'View').hidden = v !== k;
     $('tab'+k[0].toUpperCase()+k.slice(1)).classList.toggle('on', v===k);
   }
   if (v !== 'listen') audio.pause();
   if (v === 'review'){ renderRoundSel(); renderCards(); }
   if (v === 'drill'){ renderDrillSrc(); buildDrill(); }
+  if (v === 'fine') openFine();
   syncNative();
   window.scrollTo(0,0);
 }
 $('tabListen').onclick = () => setView('listen');
 $('tabReview').onclick = () => setView('review');
 $('tabDrill').onclick = () => setView('drill');
+$('tabFine').onclick = () => setView('fine');
 
 /* 告诉安卓外壳：现在是否保持亮屏、音量键是否用来标记 */
+let fineGraceUntil = 0;
 function syncNative(){
-  const listening = screen === 'work' && view === 'listen' && !audio.paused;
+  const playing = !audio.paused;
+  const listening = screen === 'work' && ((view === 'listen' && playing) || (view === 'fine' && (playing || Date.now() < fineGraceUntil)));
   native('setKeepScreenOn', screen === 'work' && !audio.paused);
   native('setVolumeKeyMark', !!(listening && cfg.volMark));
 }
-window.onVolumeKey = () => { addMark(); return true; };
+window.onVolumeKey = () => { view === 'fine' ? fineMark() : addMark(); return true; };
 
 const marksOf = r => r === S.round ? S.marks : (S.history.find(h => h.round === r)?.marks || []);
 const allMarks = () => [...S.history.flatMap(h => h.marks.map(m => ({m, r:h.round}))), ...S.marks.map(m => ({m, r:S.round}))];
@@ -956,7 +1018,7 @@ function renderRoundSel(){
   $('roundSel').value = reviewRound;
 }
 $('roundSel').onchange = e => { reviewRound = +e.target.value; stopClip(); renderCards(); };
-$('toDrill').onclick = () => { D.src = String(S.round); D.i = 0; setView('drill'); };
+$('toDrill').onclick = () => setView('fine');
 
 function renderStats(){
   const done = S.marks.filter(m => m.done).length;
@@ -968,8 +1030,13 @@ function renderStats(){
 /* ---------- 播放器 ---------- */
 function togglePlay(){ stopClip(); stopSpeak(); audio.paused ? audio.play() : audio.pause(); }
 $('playBtn').onclick = togglePlay;
-audio.onplay = () => { $('playBtn').textContent = '❚❚'; syncNative(); };
-audio.onpause = () => { $('playBtn').textContent = '▶'; syncNative(); };
+audio.onplay = () => { $('playBtn').textContent = '❚❚'; syncNative(); if (view === 'fine') fineControls(); };
+audio.onpause = () => {
+  $('playBtn').textContent = '▶';
+  /* 精听时句子刚放完的 2.5 秒内，音量键仍然算“听不懂” */
+  if (view === 'fine'){ fineGraceUntil = Date.now() + 2500; setTimeout(syncNative, 2600); fineControls(); }
+  syncNative();
+};
 audio.onended = () => { if (view === 'listen' && S.marks.length) $('listenStatus').textContent = `听完了，这一轮标记了 ${S.marks.length} 处。点“听完了，练意群”。`; };
 $('backBtn').onclick = () => { audio.currentTime = Math.max(0, audio.currentTime - 3); };
 $('rate').onchange = e => { audio.playbackRate = +e.target.value; };
@@ -1040,6 +1107,7 @@ function tick(){
       }
     }
   }
+  if (view === 'fine' && clip && clip.id === 'fine' && !audio.paused) fineTick(t);
   if (clip && !audio.paused && t >= clip.b){
     if (clip.loop){ audio.pause(); const c = clip; setTimeout(() => { if (clip === c){ audio.currentTime = c.a; audio.play(); } }, 600); }
     else { audio.pause(); clip = null; refreshClipButtons(); }
@@ -1056,19 +1124,25 @@ function wordsForTap(t){
   if (!idx.length){ let j = -1; S.words.forEach((w,i) => { if (w.s < to) j = i; }); if (j >= 0) idx = [j]; }
   return idx;
 }
+/* 记一个标记：短时间内连按算同一处 */
+function pushMark(t, idx, extra = {}){
+  const last = S.marks.find(m => Math.abs(m.t - t) < 1.2 && t >= m.t && (extra.sent == null || m.sent === extra.sent));
+  let m;
+  if (last){ last.idx = [...new Set([...last.idx, ...idx])].sort((a,b)=>a-b); last.t = t; last.ana = null; m = last; }
+  else { m = Object.assign({id: Date.now(), t, idx, done:false, ana:null}, extra); S.marks.push(m); }
+  S.marks.sort((a,b) => a.t - b.t);
+  save(); renderTicks(); renderStats(); markHardInTranscript();
+  if (cfg.vibrate){ if (NATIVE) native('vibrate', 40); else try{ navigator.vibrate?.(40); }catch(e){} }
+  return m;
+}
+function flash(btn){ btn.classList.add('flash'); setTimeout(() => btn.classList.remove('flash'), 140); }
 function addMark(){
   if (!S || screen !== 'work' || view !== 'listen') return;
   const t = audio.currentTime;
   const idx = wordsForTap(t);
   if (!idx.length) return;
-  const last = S.marks[S.marks.length-1];
-  if (last && t - last.t < 1.2 && t >= last.t){
-    last.idx = [...new Set([...last.idx, ...idx])].sort((a,b)=>a-b); last.t = t; last.ana = null;
-  } else S.marks.push({id: Date.now(), t, idx, done:false, ana:null});
-  S.marks.sort((a,b) => a.t - b.t);
-  save(); renderTicks(); renderStats(); markHardInTranscript();
-  if (cfg.vibrate){ if (NATIVE) native('vibrate', 40); else try{ navigator.vibrate?.(40); }catch(e){} }
-  const b = $('markBtn'); b.classList.add('flash'); setTimeout(() => b.classList.remove('flash'), 140);
+  pushMark(t, idx);
+  flash($('markBtn'));
   $('listenStatus').textContent = `已标记 ${fmt(t)}（共 ${S.marks.length} 处）`;
 }
 /* pointerdown 比 click 更快响应，减少按键延迟 */
@@ -1079,6 +1153,13 @@ document.addEventListener('keydown', e => {
   if (view === 'listen'){
     if (e.code === 'Space'){ e.preventDefault(); addMark(); }
     if (e.key === 'p' || e.key === 'P') togglePlay();
+  } else if (view === 'fine'){
+    if (e.code === 'Space'){ e.preventDefault(); fineMark(); }
+    else if (e.key === 'p' || e.key === 'P' || e.key === 'Enter') finePlay(false);
+    else if (e.key === 's' || e.key === 'S') finePlay(true);
+    else if (e.key === 'h' || e.key === 'H') $('fReveal').click();
+    else if (e.key === 'ArrowRight') $('fNext').click();
+    else if (e.key === 'ArrowLeft') $('fPrev').click();
   } else if (view === 'drill'){
     if (e.code === 'Space'){ e.preventDefault(); drillPlay(false); }
     else if (e.key === 's' || e.key === 'S') drillPlay(true);
@@ -1246,6 +1327,230 @@ async function translateSubs(){
   finally{ translating = false; }
 }
 
+/* ---------- 分段精听：断句 → 每 N 句一段 → 整段听 / 逐句听 / 整段复听 ---------- */
+const ABBR = /^(mr|mrs|ms|dr|st|jr|sr|vs|etc|no|inc|co|corp|gen|gov|sen|rep|prof|u\.s|u\.k|e\.g|i\.e|a\.m|p\.m)\.$/i;
+function buildSentences(){
+  const W = S.words, n = W.length; if (!n) return [];
+  const end = new Array(n).fill(false), comma = new Array(n).fill(false);
+  const flag = (i, tok) => {
+    const t = tok.trim(), bare = t.replace(/["'”’)\]]+$/, '');
+    if (/[.?!]$/.test(bare) && !ABBR.test(bare) && !/^[A-Z]\.$/.test(bare)) end[i] = true;
+    if (/[,;:—–]$/.test(bare)) comma[i] = true;
+  };
+  W.forEach((w,i) => flag(i, w.w));
+  /* Whisper 的逐词结果通常不带标点，从句段文字里把标点对齐回每个词 */
+  const toks = (S.segments || []).flatMap(g => g.t.split(/\s+/).filter(Boolean));
+  const disp = W.map(w => w.w.trim());
+  let j = 0;
+  for (let i = 0; i < n; i++){
+    const wn = norm(W[i].w); if (!wn) continue;
+    for (let k = j; k < Math.min(toks.length, j + 5); k++){
+      if (norm(toks[k]) === wn){ flag(i, toks[k]); disp[i] = toks[k]; j = k + 1; break; }
+    }
+  }
+  S.wdisp = disp;   // 带标点的写法，只用于显示和翻译
+  for (let i = 0; i < n - 1; i++) if (W[i+1].s - W[i].e > 1.2) end[i] = true;   // 长停顿也算句末
+  const raw = []; let a = 0;
+  for (let i = 0; i < n; i++) if (end[i] || i === n - 1){ raw.push([a, i]); a = i + 1; }
+  const merged = [];
+  for (const r of raw){                    // 太短的（如 "Yes."）并进下一句
+    const prev = merged[merged.length - 1];
+    if (prev && prev[1] - prev[0] + 1 < 3 && W[r[0]].s - W[prev[1]].e < 0.8) prev[1] = r[1];
+    else merged.push([...r]);
+  }
+  const MAX = 28, out = [];
+  const split = (a, b) => {                // 太长的在逗号或停顿处切开
+    if (b - a + 1 <= MAX){ out.push({a, b}); return; }
+    let best = a + Math.floor((b - a) / 2), score = -1;
+    for (let i = a + 5; i <= b - 5; i++){
+      const sc = (W[i+1].s - W[i].e) + (comma[i] ? 0.6 : 0) - Math.abs((i - a) - (b - a) / 2) * 0.01;
+      if (sc > score){ score = sc; best = i; }
+    }
+    split(a, best); split(best + 1, b);
+  };
+  merged.forEach(([a, b]) => split(a, b));
+  return out;
+}
+
+let F = null, fReveal = false, fLastK = -1;
+function fineInit(){
+  if (!S.sents?.length){ S.sents = buildSentences(); save(); }
+  S.sentCn = S.sentCn || {};
+  S.fine = Object.assign({size: 5, part: 0, stage: 'part', sent: 0, done: {}}, S.fine || {});
+  F = S.fine;
+}
+const partCount = () => Math.max(1, Math.ceil(S.sents.length / F.size));
+const partRange = p => [p * F.size, Math.min(S.sents.length, (p + 1) * F.size) - 1];
+const wd = i => S.wdisp?.[i] || S.words[i].w.trim();
+const sentText = k => { const r = []; for (let i = S.sents[k].a; i <= S.sents[k].b; i++) r.push(wd(i)); return r.join(' '); };
+const sentOf = i => S.sents.findIndex(x => i >= x.a && i <= x.b);
+const sentMarks = k => { const {a, b} = S.sents[k]; return S.marks.filter(m => m.idx.some(i => i >= a && i <= b)); };
+const masked = t => t.split(' ').map(w => '•'.repeat(Math.min(w.length, 7))).join(' ');
+
+function openFine(){
+  fineInit();
+  F.part = Math.min(F.part, partCount() - 1);
+  fReveal = false;
+  $('fSize').innerHTML = [1,2,3,4,5,6,8,10].map(n => `<option value="${n}">${n}</option>`).join('');
+  $('fSize').value = F.size;
+  $('fStatus').textContent = '';
+  renderFine();
+}
+$('fSize').onchange = e => {
+  const first = partRange(F.part)[0];
+  F.size = +e.target.value; F.part = Math.floor(first / F.size); F.stage = 'part'; F.done = {};
+  save(); stopClip(); renderFine();
+};
+function renderFine(){
+  if (!F) return;
+  const [s0, s1] = partRange(F.part), n = partCount();
+  $('fWhere').textContent = `第 ${F.part + 1} / ${n} 段 · 第 ${s0 + 1}–${s1 + 1} 句`;
+  $('fParts').innerHTML = Array.from({length: n}, (_, p) => {
+    const [a, b] = partRange(p); let cnt = 0;
+    for (let k = a; k <= b; k++) cnt += sentMarks(k).length;
+    const sub = F.done[p] ? '✓' : cnt ? `<span class="dot">●${cnt}</span>` : '&nbsp;';
+    return `<button class="pchip${p === F.part ? ' on' : ''}${F.done[p] ? ' done' : ''}" data-p="${p}">${p + 1}<small>${sub}</small></button>`;
+  }).join('');
+  $('fParts').querySelector('.pchip.on')?.scrollIntoView({block: 'nearest', inline: 'center'});
+  const order = ['part', 'sent', 'again'];
+  $('fSteps').querySelectorAll('span').forEach(sp => {
+    sp.classList.toggle('on', sp.dataset.s === F.stage);
+    sp.classList.toggle('ok', order.indexOf(sp.dataset.s) < order.indexOf(F.stage));
+  });
+  let body = '';
+  if (F.stage === 'sent'){
+    const k = Math.min(Math.max(F.sent, s0), s1); F.sent = k;
+    const {a, b} = S.sents[k];
+    const hard = new Set(sentMarks(k).flatMap(m => m.idx));
+    const tx = fReveal
+      ? S.words.slice(a, b + 1).map((w, x) => `<span class="w${hard.has(a + x) ? ' sel' : ''}" data-i="${a + x}">${esc(wd(a + x))}</span>`).join(' ')
+      : esc(masked(sentText(k)));
+    const nm = sentMarks(k).length;
+    body = `<div class="row" style="justify-content:space-between"><span class="badge">本段第 ${k - s0 + 1} / ${s1 - s0 + 1} 句</span>${nm ? `<span class="hint" style="color:var(--mark)">已标记 ${nm} 处</span>` : ''}</div>
+      <div class="sent"><div class="tx${fReveal ? '' : ' masked'}">${tx}</div>${fReveal ? `<div class="cn">${esc(S.sentCn[k] || '')}</div>` : ''}</div>
+      ${fReveal ? '<span class="hint" style="text-align:center">点单词可以把它加入或移出难点</span>' : ''}`;
+  } else {
+    body = `<div class="slist">` + Array.from({length: s1 - s0 + 1}, (_, x) => {
+      const k = s0 + x, nm = sentMarks(k).length;
+      const hard = new Set(sentMarks(k).flatMap(m => m.idx));
+      const tx = fReveal ? S.words.slice(S.sents[k].a, S.sents[k].b + 1).map((w, y) => hard.has(S.sents[k].a + y) ? `<mark class="w sel" style="color:inherit">${esc(wd(S.sents[k].a + y))}</mark>` : esc(wd(S.sents[k].a + y))).join(' ') : esc(masked(sentText(k)));
+      return `<button class="sl" data-k="${k}"><span class="n">${x + 1}</span><span class="tx${fReveal ? '' : ' masked'}">${tx}${nm ? ` <span class="hm">●${nm}</span>` : ''}</span>${fReveal && S.sentCn[k] ? `<span class="cn">${esc(S.sentCn[k])}</span>` : ''}</button>`;
+    }).join('') + `</div><span class="hint">${F.stage === 'part' ? '先不看文字把这一段连起来听，没听懂的地方按“听不懂”。点某一句可以直接跳到逐句听。' : '逐句都练过了，再把整段连起来听一遍，确认能听懂。'}</span>`;
+  }
+  $('fBody').innerHTML = body;
+  fLastK = -1;
+  const last = F.part === n - 1;
+  const L = {
+    part:  ['‹ 上一段', '逐句听 ›', F.part === 0],
+    sent:  [F.sent === s0 ? '‹ 回到整段' : '‹ 上一句', F.sent === s1 ? '整段复听 ›' : '下一句 ›', false],
+    again: ['‹ 回到逐句', last ? '完成，去练意群 ›' : '听懂了，下一段 ›', false],
+  }[F.stage];
+  $('fPrev').textContent = L[0]; $('fNext').textContent = L[1]; $('fPrev').disabled = L[2];
+  $('fReveal').textContent = fReveal ? '隐藏原文' : '显示原文';
+  $('fMarkHint').textContent = F.stage === 'sent' ? '标记这一句里没听懂的地方' : (cfg.volMark && NATIVE ? '也可以按音量键' : '听到没懂的地方立刻按');
+  fineControls();
+  if (fReveal) translatePart();
+}
+function fineControls(){
+  const playing = !audio.paused && clip?.id === 'fine';
+  $('fPlay').textContent = playing ? '❚❚ 暂停' : F?.stage === 'sent' ? '▶ 播放这句' : '▶ 播放整段';
+}
+function fineRange(){
+  const [s0, s1] = partRange(F.part);
+  if (F.stage === 'sent') return [S.sents[F.sent].a, S.sents[F.sent].b];
+  return [S.sents[s0].a, S.sents[s1].b];
+}
+function finePlay(slow){
+  if (!F) return;
+  if (!audio.paused && clip?.id === 'fine' && !slow){ stopClip(); fineControls(); return; }
+  const [a, b] = fineRange();
+  playClip(S.words[a].s - 0.12, S.words[b].e + 0.2, {id: 'fine', rate: slow ? 0.75 : 1});
+  fineControls();
+}
+function fineTick(t){
+  if (F.stage === 'sent') return;
+  const i = S.words.findIndex(w => t >= w.s - 0.05 && t < w.e + 0.3);
+  const k = i >= 0 ? sentOf(i) : -1;
+  if (k === fLastK || k < 0) return;
+  fLastK = k;
+  $('fBody').querySelectorAll('.sl').forEach(el => el.classList.toggle('now', +el.dataset.k === k));
+}
+function fineMark(){
+  if (!S || !F || screen !== 'work' || view !== 'fine') return;
+  const t = audio.currentTime, [wa, wb] = fineRange();
+  let idx = wordsForTap(t).filter(i => i >= wa && i <= wb);
+  if (!idx.length){
+    let j = -1; for (let i = wa; i <= wb; i++) if (S.words[i].s < t) j = i;
+    idx = j >= 0 ? [j] : [wa];
+  }
+  const k = sentOf(idx[idx.length - 1]);
+  idx = idx.filter(i => sentOf(i) === k);
+  pushMark(Math.min(t, S.words[idx[idx.length - 1]].e + cfg.lag + 0.01), idx, {sent: k, part: F.part});
+  flash($('fMark'));
+  $('fStatus').className = 'status'; $('fStatus').textContent = `已标记第 ${k - partRange(F.part)[0] + 1} 句`;
+  renderFine();
+}
+$('fMark').addEventListener('pointerdown', e => { e.preventDefault(); fineMark(); });
+$('fMark').addEventListener('keydown', e => { if (e.key === 'Enter') fineMark(); });
+$('fPlay').onclick = () => finePlay(false);
+$('fSlow').onclick = () => finePlay(true);
+$('fReveal').onclick = () => { fReveal = !fReveal; renderFine(); };
+function fineGo(stage, sent, play = true){
+  F.stage = stage; if (sent != null) F.sent = sent;
+  fReveal = false; save(); stopClip(); renderFine();
+  $('fStatus').textContent = '';
+  if (play) finePlay(false);
+}
+$('fNext').onclick = () => {
+  const [s0, s1] = partRange(F.part);
+  if (F.stage === 'part') return fineGo('sent', s0);
+  if (F.stage === 'sent') return F.sent < s1 ? fineGo('sent', F.sent + 1) : fineGo('again');
+  F.done[F.part] = true;
+  if (F.part < partCount() - 1){ F.part++; return fineGo('part', partRange(F.part)[0]); }
+  save(); D.src = String(S.round); D.i = 0; setView('drill');
+};
+$('fPrev').onclick = () => {
+  const [s0, s1] = partRange(F.part);
+  if (F.stage === 'part'){ if (F.part > 0){ F.part--; fineGo('part', partRange(F.part)[0], false); } return; }
+  if (F.stage === 'sent') return F.sent > s0 ? fineGo('sent', F.sent - 1) : fineGo('part', null, false);
+  fineGo('sent', s1);
+};
+$('fParts').onclick = e => { const c = e.target.closest('[data-p]'); if (!c) return; F.part = +c.dataset.p; fineGo('part', partRange(F.part)[0], false); };
+$('fSteps').onclick = e => { const sp = e.target.closest('[data-s]'); if (!sp) return; fineGo(sp.dataset.s, sp.dataset.s === 'sent' ? partRange(F.part)[0] : null, false); };
+$('fBody').onclick = e => {
+  const row = e.target.closest('.sl');
+  if (row) return fineGo('sent', +row.dataset.k);
+  const w = e.target.closest('.sent .w');
+  if (!w) return;
+  /* 显示原文后，点词把它加入 / 移出这一句的难点 */
+  const i = +w.dataset.i, k = sentOf(i);
+  const m = sentMarks(k).find(m => m.sent === k) || sentMarks(k)[0];
+  if (m && m.idx.includes(i)){
+    m.idx = m.idx.filter(x => x !== i); m.ana = null;
+    if (!m.idx.length) S.marks = S.marks.filter(x => x !== m);
+  } else if (m){ m.idx = [...m.idx, i].sort((a, b) => a - b); m.ana = null; }
+  else S.marks.push({id: Date.now(), t: S.words[i].e + cfg.lag + 0.01, idx: [i], done: false, ana: null, sent: k, part: F.part});
+  S.marks.sort((a, b) => a.t - b.t);
+  save(); renderTicks(); renderStats(); markHardInTranscript(); renderFine();
+};
+/* 显示原文时，把这一段的句子一起翻译成中文（结果会保存） */
+let fTranslating = false;
+async function translatePart(){
+  const [s0, s1] = partRange(F.part);
+  const need = []; for (let k = s0; k <= s1; k++) if (!S.sentCn[k]) need.push(k);
+  if (!need.length || fTranslating || !aiKey()) return;
+  fTranslating = true;
+  $('fStatus').className = 'status'; $('fStatus').textContent = '正在翻译这一段…';
+  try{
+    const json = await callAI('你是专业的英汉字幕译者。把每一句英文翻译成自然、口语化的简体中文，结合上下文，保持句子一一对应。只输出 JSON。',
+      '返回格式：{"items":[{"i":原样返回的序号,"cn":"中文翻译"}]}\n\n' + JSON.stringify(need.map(k => ({i: k, en: sentText(k)}))), 3000);
+    for (const it of json.items || []) S.sentCn[+it.i] = it.cn;
+    save(); $('fStatus').textContent = '';
+    if (view === 'fine') renderFine();
+  }catch(err){ $('fStatus').className = 'status err'; $('fStatus').textContent = '翻译失败：' + err.message; }
+  finally{ fTranslating = false; }
+}
+
 /* ---------- 意群练习 ---------- */
 const D = {src:'undone', list:[], i:0, voice:'tts', reveal:false};
 const norm = s => s.toLowerCase().replace(/[^a-z0-9']/g,'');
@@ -1343,6 +1648,7 @@ $('drillView').addEventListener('touchend', e => {
 $('relisten').onclick = () => {
   S.history.push({round:S.round, count:S.marks.length, marks:S.marks});
   S.round += 1; S.marks = []; reviewRound = S.round;
+  if (S.fine) S.fine = {size: S.fine.size, part: 0, stage: 'part', sent: 0, done: {}};
   save(); renderTicks(); renderStats(); markHardInTranscript();
   audio.currentTime = 0; setSubMode('none');
   setView('listen');
