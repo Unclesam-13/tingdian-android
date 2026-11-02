@@ -678,7 +678,7 @@ $('lib').onclick = async e => {
     e.stopPropagation();
     if (pendingDel !== d.dataset.del){ pendingDel = d.dataset.del; d.textContent = '确认删除'; d.style.color = 'var(--err)'; setTimeout(() => { if (pendingDel === d.dataset.del){ pendingDel = null; renderLib(); } }, 3000); return; }
     pendingDel = null;
-    await DB.del('sess', d.dataset.del); await DB.del('audio', d.dataset.del);
+    await DB.del('sess', d.dataset.del); await DB.del('audio', d.dataset.del); await DB.del('audio', d.dataset.del + '|pcm');
     renderLib(); return;
   }
   const it = e.target.closest('.item'); if (it && !busy.has(it.dataset.key)) openSession(it.dataset.key);
@@ -747,10 +747,32 @@ async function openSession(key){
   if (!s.words?.length) return transcribe(key);
   const f = await DB.get('audio', key);
   if (!f){ $('homeStatus').textContent = '音频文件丢失，请重新导入同一个文件'; return; }
+  /* mp3（尤其是可变码率）在浏览器里跳转只能估算位置，越往后偏差越大，
+     和 Whisper 的时间点对不上。第一次打开时解码成 16kHz 单声道 WAV，跳转就精确到采样点。 */
+  let play = await DB.get('audio', key + '|pcm').catch(() => null);
+  if (!play && !/wav/i.test(f.type || '')){
+    const st = $('homeStatus'); st.className = 'status'; st.textContent = '第一次打开，正在准备精确定位的播放音频…';
+    try{ play = await makePcm(f); DB.put('audio', key + '|pcm', play).catch(() => {}); st.textContent = ''; }
+    catch(e){ play = null; st.textContent = ''; console.warn('PCM 转换失败，改用原文件播放', e); }
+  }
   if (audioUrl) URL.revokeObjectURL(audioUrl);
-  audioUrl = URL.createObjectURL(f); audio.src = audioUrl;
+  audioUrl = URL.createObjectURL(play || f); audio.src = audioUrl;
   S = s; S.lastOpened = Date.now(); save();
   openWorkspace();
+}
+async function makePcm(blob){
+  const Ctx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+  if (!Ctx) throw new Error('不支持音频解码');
+  const ctx = new Ctx(1, 16000, 16000);
+  const ab = await ctx.decodeAudioData(await blob.arrayBuffer());   // 解码时会重采样到 16kHz
+  const n = ab.length, c0 = ab.getChannelData(0), c1 = ab.numberOfChannels > 1 ? ab.getChannelData(1) : null;
+  const pcm = new Int16Array(n);
+  for (let i = 0; i < n; i++){ let v = c1 ? (c0[i] + c1[i]) * 0.5 : c0[i]; pcm[i] = Math.max(-1, Math.min(1, v)) * 32767; }
+  const h = new DataView(new ArrayBuffer(44)), str = (o, t) => [...t].forEach((c, i) => h.setUint8(o + i, c.charCodeAt(0)));
+  str(0, 'RIFF'); h.setUint32(4, 36 + n * 2, true); str(8, 'WAVEfmt '); h.setUint32(16, 16, true);
+  h.setUint16(20, 1, true); h.setUint16(22, 1, true); h.setUint32(24, 16000, true); h.setUint32(28, 32000, true);
+  h.setUint16(32, 2, true); h.setUint16(34, 16, true); str(36, 'data'); h.setUint32(40, n * 2, true);
+  return new Blob([h.buffer, pcm.buffer], {type: 'audio/wav'});
 }
 
 /* ---------- 每日更新：播客订阅 ---------- */
@@ -1181,6 +1203,14 @@ $('clearMarks').onclick = () => {
 
 /* ---------- 片段播放 ---------- */
 function ctxRange(m){ const a = Math.max(0, m.idx[0]-7), b = Math.min(S.words.length-1, m.idx[m.idx.length-1]+7); return [a,b]; }
+/* 第 a 到第 b 个词的播放区间：起止点放在和前后词之间停顿的中点，
+   既不切掉尾音，也不带进下一句的开头 */
+function wordSpan(a, b){
+  const W = S.words;
+  const start = a > 0 ? Math.max(W[a].s - 0.15, (W[a-1].e + W[a].s) / 2) : Math.max(0, W[a].s - 0.15);
+  const end = b < W.length - 1 ? Math.min(W[b].e + 0.25, Math.max(W[b].e + 0.04, (W[b].e + W[b+1].s) / 2)) : W[b].e + 0.3;
+  return [start, end];
+}
 function playClip(a, b, opts={}){
   stopSpeak();
   audio.playbackRate = opts.rate || 1;
@@ -1243,12 +1273,12 @@ function cardAction(el){
     m.ana = null; save(); renderCards(); return;
   }
   const act = el.dataset.act, m = findMark(el.dataset.id);
-  if (act === 'play') playClip(S.words[m.idx[0]].s - 0.15, S.words[m.idx.at(-1)].e + 0.15, {id:m.id});
+  if (act === 'play') playClip(...wordSpan(m.idx[0], m.idx.at(-1)), {id:m.id});
   if (act === 'loop'){
     if (clip && clip.loop && clip.id == m.id) stopClip();
-    else playClip(S.words[m.idx[0]].s - 0.15, S.words[m.idx.at(-1)].e + 0.15, {loop:true, rate:0.75, id:m.id});
+    else playClip(...wordSpan(m.idx[0], m.idx.at(-1)), {loop:true, rate:0.75, id:m.id});
   }
-  if (act === 'ctx'){ const [a,b] = ctxRange(m); playClip(S.words[a].s, S.words[b].e + 0.1, {id:m.id}); }
+  if (act === 'ctx'){ const [a,b] = ctxRange(m); playClip(...wordSpan(a, b), {id:m.id}); }
   if (act === 'done'){ m.done = !m.done; save(); renderStats(); renderRoundSel(); renderCards(); }
   if (act === 'del'){
     if (reviewRound === S.round) S.marks = S.marks.filter(x => x!==m);
@@ -1262,7 +1292,7 @@ function cardAction(el){
     const target = norm(el.dataset.w);
     let i = m.idx.find(i => norm(S.words[i].w) === target);
     if (i == null){ const [a,b] = ctxRange(m); for (let k=a;k<=b;k++) if (norm(S.words[k].w) === target){ i = k; break; } }
-    if (i != null) playClip(S.words[i].s - 0.08, S.words[i].e + 0.1, {rate:0.8, id:m.id}); else speak(el.dataset.w);
+    if (i != null) playClip(...wordSpan(i, i), {rate:0.8, id:m.id}); else speak(el.dataset.w);
   }
 }
 $('cards').onclick = e => { const el = e.target.closest('[data-act], .w'); if (el) cardAction(el); };
@@ -1489,7 +1519,7 @@ function finePlay(slow){
   if (!F) return;
   if (!audio.paused && clip?.id === 'fine' && !slow){ stopClip(); fineControls(); return; }
   const [a, b] = fineRange();
-  playClip(S.words[a].s - 0.12, S.words[b].e + 0.2, {id: 'fine', rate: slow ? 0.75 : 1});
+  playClip(...wordSpan(a, b), {id: 'fine', rate: slow ? 0.75 : 1});
   fineControls();
 }
 function fineTick(t){
@@ -1644,7 +1674,7 @@ function renderDrill(){
 function drillPlay(slow){
   const x = D.list[D.i]; if (!x) return;
   if (D.voice === 'tts'){ stopClip(); speak(groupText(x.m), slow ? 0.6 : 0.9); }
-  else { const [a,b] = groupRange(x.m); playClip(S.words[a].s - 0.12, S.words[b].e + 0.15, {rate: slow ? 0.7 : 1, id:x.m.id}); }
+  else { const [a,b] = groupRange(x.m); playClip(...wordSpan(a, b), {rate: slow ? 0.7 : 1, id:x.m.id}); }
 }
 function drillGo(d){ if (!D.list.length) return; D.i = (D.i + d + D.list.length) % D.list.length; D.reveal = false; stopClip(); stopSpeak(); renderDrill(); drillPlay(false); }
 function drillZh(){
