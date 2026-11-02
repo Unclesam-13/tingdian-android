@@ -122,8 +122,8 @@ button:active{filter:brightness(.95)}
 .fhead{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .fhead .where{font-weight:700;flex:1;min-width:0}
 .fhead select{width:auto;min-height:36px;padding:4px 8px;font-size:14px}
-.steps{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--line);border-radius:12px;overflow:hidden}
-.steps span{text-align:center;font-size:13px;padding:8px 4px;color:var(--muted);border-right:1px solid var(--line)}
+.steps{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.steps span{text-align:center;font-size:12.5px;padding:8px 2px;cursor:pointer;color:var(--muted);border-right:1px solid var(--line)}
 .steps span:last-child{border-right:none}
 .steps span.on{background:var(--accent);color:var(--accent-ink);font-weight:700}
 .steps span.ok{color:var(--accent)}
@@ -143,6 +143,7 @@ button:active{filter:brightness(.95)}
 .sent .cn{color:var(--accent);font-size:16px}
 .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .grid3 button{min-height:50px}
+#fBody #drillPanel{border:none;padding:0;background:transparent;border-radius:0}
 .markbtn.slim{min-height:clamp(90px,15vh,140px);font-size:26px}
 
 /* drill */
@@ -331,8 +332,8 @@ button:active{filter:brightness(.95)}
       <label class="row" style="gap:6px;font-size:13px;color:var(--muted)">每段<select id="fSize"></select>句</label>
     </div>
     <div class="parts" id="fParts"></div>
-    <div class="steps" id="fSteps"><span data-s="part">① 整段听</span><span data-s="sent">② 逐句听</span><span data-s="again">③ 整段复听</span></div>
-    <div class="grid3">
+    <div class="steps" id="fSteps"><span data-s="part">① 整段听</span><span data-s="sent">② 逐句听</span><span data-s="group">③ 练意群</span><span data-s="again">④ 整段复听</span></div>
+    <div class="grid3" id="fCtrls">
       <button class="primary" id="fPlay">▶ 播放</button>
       <button id="fSlow">慢速</button>
       <button id="fReveal">显示原文</button>
@@ -343,13 +344,13 @@ button:active{filter:brightness(.95)}
       <button id="fPrev">‹ 上一句</button>
       <button class="primary" id="fNext">下一句 ›</button>
     </div>
-    <div class="markwrap"><button class="markbtn slim" id="fMark">听不懂<small id="fMarkHint">标记这一句里没听懂的地方</small></button></div>
+    <div class="markwrap" id="fMarkWrap"><button class="markbtn slim" id="fMark">听不懂<small id="fMarkHint">标记这一句里没听懂的地方</small></button></div>
   </section>
 
   <!-- 意群练习 -->
   <section id="drillView" hidden style="display:grid;gap:14px">
     <label class="f">练习范围<select id="drillSrc"></select></label>
-    <div class="panel drill">
+    <div class="panel drill" id="drillPanel">
       <div class="row" style="justify-content:space-between">
         <span class="badge" id="drillPos">0 / 0</span>
         <label class="toggle"><input type="checkbox" id="cnHint"> 先看中文</label>
@@ -392,7 +393,7 @@ button:active{filter:brightness(.95)}
   <nav class="nav" id="nav">
     <button id="tabListen" class="on"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="14" width="4" height="7" rx="1.5"/><rect x="17" y="14" width="4" height="7" rx="1.5"/></svg>盲听</button>
     <button id="tabFine"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16"/><path d="M4 12h10"/><path d="M4 18h13"/><circle cx="19" cy="12" r="1.6"/></svg>分段精听</button>
-    <button id="tabDrill"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M17 2l3 3-3 3"/><path d="M4 11V9a4 4 0 0 1 4-4h12"/><path d="M7 22l-3-3 3-3"/><path d="M20 13v2a4 4 0 0 1-4 4H4"/></svg><span>意群练习<span class="cnt" id="reviewCount" hidden></span></span></button>
+    <button id="tabDrill"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M17 2l3 3-3 3"/><path d="M4 11V9a4 4 0 0 1 4-4h12"/><path d="M7 22l-3-3 3-3"/><path d="M20 13v2a4 4 0 0 1-4 4H4"/></svg><span>意群汇总<span class="cnt" id="reviewCount" hidden></span></span></button>
     <button id="tabReview"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6a3 3 0 0 1 2 1v15a3 3 0 0 0-2-1H4z"/><path d="M20 4h-6a3 3 0 0 0-2 1v15a3 3 0 0 1 2-1h6z"/></svg>复习难点</button>
   </nav>
 </main>
@@ -613,7 +614,7 @@ async function sayParts(parts, lang, rate, gap = 800){
     if (i < parts.length - 1 && tok === speakToken) await sleep(gap);
   }
 }
-function ttsNote(msg){ const st = view === 'drill' ? $('drillStatus') : view === 'review' ? $('reviewStatus') : $('settingsStatus'); if (st){ st.className = 'status err'; st.textContent = msg; } }
+function ttsNote(msg){ const st = (view === 'drill' || view === 'fine') ? $('drillStatus') : view === 'review' ? $('reviewStatus') : $('settingsStatus'); if (st){ st.className = 'status err'; st.textContent = msg; } }
 const speak = (text, rate = 0.9) => sayParts([text], 'en-US', rate);
 const speakZh = parts => sayParts(Array.isArray(parts) ? parts : [parts], 'zh-CN', 1, 800);
 function stopSpeak(){
@@ -986,7 +987,8 @@ function setView(v){
   }
   if (v !== 'listen') audio.pause();
   if (v === 'review'){ renderRoundSel(); renderCards(); }
-  if (v === 'drill'){ renderDrillSrc(); buildDrill(); }
+  if (v !== 'fine') restoreDrillPanel();
+  if (v === 'drill'){ if (D.src === 'fine' || !D.src) D.src = 'undone'; renderDrillSrc(); buildDrill(); }
   if (v === 'fine') openFine();
   syncNative();
   window.scrollTo(0,0);
@@ -1153,14 +1155,14 @@ document.addEventListener('keydown', e => {
   if (view === 'listen'){
     if (e.code === 'Space'){ e.preventDefault(); addMark(); }
     if (e.key === 'p' || e.key === 'P') togglePlay();
-  } else if (view === 'fine'){
+  } else if (view === 'fine' && F?.stage !== 'group'){
     if (e.code === 'Space'){ e.preventDefault(); fineMark(); }
     else if (e.key === 'p' || e.key === 'P' || e.key === 'Enter') finePlay(false);
     else if (e.key === 's' || e.key === 'S') finePlay(true);
     else if (e.key === 'h' || e.key === 'H') $('fReveal').click();
     else if (e.key === 'ArrowRight') $('fNext').click();
     else if (e.key === 'ArrowLeft') $('fPrev').click();
-  } else if (view === 'drill'){
+  } else if (view === 'drill' || view === 'fine'){
     if (e.code === 'Space'){ e.preventDefault(); drillPlay(false); }
     else if (e.key === 's' || e.key === 'S') drillPlay(true);
     else if (e.key === 'c' || e.key === 'C') drillZh();
@@ -1269,7 +1271,7 @@ $('cards').onclick = e => { const el = e.target.closest('[data-act], .w'); if (e
 $('analyzeAll').onclick = () => analyze(marksOf(reviewRound).filter(m => !m.ana));
 const aiKey = () => cfg.aiProvider === 'claude' ? cfg.claudeKey : cfg.openaiKey;
 async function analyze(list){
-  const st = view === 'drill' ? $('drillStatus') : $('reviewStatus');
+  const st = (view === 'drill' || view === 'fine') ? $('drillStatus') : $('reviewStatus');
   if (!list.length){ st.textContent = '这一轮的难点都已分析过'; return; }
   if (!aiKey()){ st.className = 'status err'; st.textContent = '请先在设置里填写 AI 分析用的 API Key'; return; }
   st.className = 'status'; st.textContent = `正在分析 ${list.length} 处难点…`;
@@ -1284,7 +1286,7 @@ async function analyze(list){
   try{
     const json = await callAI(system, user);
     for (const it of json.items || []){ const m = findMark(it.id); if (m) m.ana = it; }
-    save(); if (view === 'review') renderCards(); if (view === 'drill') renderDrill();
+    save(); if (view === 'review') renderCards(); if (view === 'drill' || (view === 'fine' && F?.stage === 'group')) renderDrill();
     st.textContent = '分析完成';
   }catch(err){ st.className = 'status err'; st.textContent = 'AI 分析失败：' + err.message; }
   finally{ list.forEach(m => delete m._busy); }
@@ -1373,6 +1375,14 @@ function buildSentences(){
 }
 
 let F = null, fReveal = false, fLastK = -1;
+/* 意群练习面板：在“意群汇总”页和分段精听第 ③ 步之间共用 */
+const drillHome = {parent: null, next: null};
+function restoreDrillPanel(){
+  const p = $('drillPanel');
+  if (!drillHome.parent){ drillHome.parent = p.parentNode; drillHome.next = p.nextSibling; return; }
+  if (p.parentNode !== drillHome.parent) drillHome.parent.insertBefore(p, drillHome.next);
+}
+restoreDrillPanel();
 function fineInit(){
   if (!S.sents?.length){ S.sents = buildSentences(); save(); }
   S.sentCn = S.sentCn || {};
@@ -1412,13 +1422,22 @@ function renderFine(){
     return `<button class="pchip${p === F.part ? ' on' : ''}${F.done[p] ? ' done' : ''}" data-p="${p}">${p + 1}<small>${sub}</small></button>`;
   }).join('');
   $('fParts').querySelector('.pchip.on')?.scrollIntoView({block: 'nearest', inline: 'center'});
-  const order = ['part', 'sent', 'again'];
+  restoreDrillPanel();
+  const order = ['part', 'sent', 'group', 'again'];
   $('fSteps').querySelectorAll('span').forEach(sp => {
     sp.classList.toggle('on', sp.dataset.s === F.stage);
     sp.classList.toggle('ok', order.indexOf(sp.dataset.s) < order.indexOf(F.stage));
   });
   let body = '';
-  if (F.stage === 'sent'){
+  const inGroup = F.stage === 'group';
+  $('fCtrls').hidden = inGroup; $('fMarkWrap').hidden = inGroup;
+  if (inGroup){
+    const pm = partMarks();
+    const left = pm.filter(m => !m.done).length;
+    body = pm.length
+      ? `<div class="row" style="justify-content:space-between"><b>这一段的难点</b><span class="hint">${pm.length - left} / ${pm.length} 已熟悉</span></div><span class="hint">不看文字反复听，实在听不出再点“显示文字”。练熟一个就点“标为熟悉”。</span>`
+      : `<div class="empty">这一段没有标记难点，可以直接整段复听。</div>`;
+  } else if (F.stage === 'sent'){
     const k = Math.min(Math.max(F.sent, s0), s1); F.sent = k;
     const {a, b} = S.sents[k];
     const hard = new Set(sentMarks(k).flatMap(m => m.idx));
@@ -1439,11 +1458,17 @@ function renderFine(){
   }
   $('fBody').innerHTML = body;
   fLastK = -1;
+  if (inGroup && partMarks().length){
+    $('fBody').appendChild($('drillPanel'));
+    if (D.src !== 'fine' || D.part !== F.part){ D.src = 'fine'; D.part = F.part; D.i = 0; buildDrill(); }
+    else renderDrill();
+  }
   const last = F.part === n - 1;
   const L = {
     part:  ['‹ 上一段', '逐句听 ›', F.part === 0],
-    sent:  [F.sent === s0 ? '‹ 回到整段' : '‹ 上一句', F.sent === s1 ? '整段复听 ›' : '下一句 ›', false],
-    again: ['‹ 回到逐句', last ? '完成，去练意群 ›' : '听懂了，下一段 ›', false],
+    sent:  [F.sent === s0 ? '‹ 回到整段' : '‹ 上一句', F.sent === s1 ? '练意群 ›' : '下一句 ›', false],
+    group: ['‹ 回到逐句', '整段复听 ›', false],
+    again: ['‹ 回到练意群', last ? '全部完成，去汇总 ›' : '听懂了，下一段 ›', false],
   }[F.stage];
   $('fPrev').textContent = L[0]; $('fNext').textContent = L[1]; $('fPrev').disabled = L[2];
   $('fReveal').textContent = fReveal ? '隐藏原文' : '显示原文';
@@ -1495,25 +1520,30 @@ $('fMark').addEventListener('keydown', e => { if (e.key === 'Enter') fineMark();
 $('fPlay').onclick = () => finePlay(false);
 $('fSlow').onclick = () => finePlay(true);
 $('fReveal').onclick = () => { fReveal = !fReveal; renderFine(); };
+const partMarks = () => { const [s0, s1] = partRange(F.part); const out = new Set(); for (let k = s0; k <= s1; k++) sentMarks(k).forEach(m => out.add(m)); return [...out].sort((a, b) => a.t - b.t); };
 function fineGo(stage, sent, play = true){
   F.stage = stage; if (sent != null) F.sent = sent;
-  fReveal = false; save(); stopClip(); renderFine();
+  fReveal = false; save(); stopClip(); stopSpeak();
+  if (stage === 'group'){ D.src = ''; const need = partMarks().filter(m => !m.ana); if (need.length && aiKey()) analyze(need); }
+  renderFine();
   $('fStatus').textContent = '';
   if (play) finePlay(false);
 }
 $('fNext').onclick = () => {
   const [s0, s1] = partRange(F.part);
   if (F.stage === 'part') return fineGo('sent', s0);
-  if (F.stage === 'sent') return F.sent < s1 ? fineGo('sent', F.sent + 1) : fineGo('again');
+  if (F.stage === 'sent') return F.sent < s1 ? fineGo('sent', F.sent + 1) : fineGo('group', null, false);
+  if (F.stage === 'group') return fineGo('again');
   F.done[F.part] = true;
   if (F.part < partCount() - 1){ F.part++; return fineGo('part', partRange(F.part)[0]); }
-  save(); D.src = String(S.round); D.i = 0; setView('drill');
+  save(); D.src = 'undone'; D.i = 0; setView('drill');
 };
 $('fPrev').onclick = () => {
   const [s0, s1] = partRange(F.part);
   if (F.stage === 'part'){ if (F.part > 0){ F.part--; fineGo('part', partRange(F.part)[0], false); } return; }
   if (F.stage === 'sent') return F.sent > s0 ? fineGo('sent', F.sent - 1) : fineGo('part', null, false);
-  fineGo('sent', s1);
+  if (F.stage === 'group') return fineGo('sent', s1, false);
+  fineGo('group', null, false);
 };
 $('fParts').onclick = e => { const c = e.target.closest('[data-p]'); if (!c) return; F.part = +c.dataset.p; fineGo('part', partRange(F.part)[0], false); };
 $('fSteps').onclick = e => { const sp = e.target.closest('[data-s]'); if (!sp) return; fineGo(sp.dataset.s, sp.dataset.s === 'sent' ? partRange(F.part)[0] : null, false); };
@@ -1565,7 +1595,8 @@ function renderDrillSrc(){
 }
 function buildDrill(){
   let list;
-  if (D.src === 'undone') list = allMarks().filter(x => !x.m.done);
+  if (D.src === 'fine') list = partMarks().map(m => ({m, r: S.round}));
+  else if (D.src === 'undone') list = allMarks().filter(x => !x.m.done);
   else if (D.src === 'all') list = allMarks();
   else list = marksOf(+D.src).map(m => ({m, r:+D.src}));
   const seen = new Set();
@@ -1633,7 +1664,11 @@ $('srcTts').onclick = () => { D.voice = 'tts'; renderDrill(); drillPlay(false); 
 $('srcOrig').onclick = () => { D.voice = 'orig'; renderDrill(); drillPlay(false); };
 $('drillPrev').onclick = () => drillGo(-1);
 $('drillNext').onclick = () => drillGo(1);
-$('drillDone').onclick = () => { const x = D.list[D.i]; if (!x) return; x.m.done = !x.m.done; save(); renderStats(); renderDrillSrc(); renderDrill(); };
+$('drillDone').onclick = () => {
+  const x = D.list[D.i]; if (!x) return; x.m.done = !x.m.done; save(); renderStats();
+  if (view === 'fine'){ renderFine(); if (x.m.done && D.list.some(y => !y.m.done)){ do { D.i = (D.i + 1) % D.list.length; } while (D.list[D.i].m.done); D.reveal = false; renderDrill(); } }
+  else { renderDrillSrc(); renderDrill(); }
+};
 $('drillAna').onclick = e => { const el = e.target.closest('[data-act]'); if (el) cardAction(el); };
 /* 左右滑动切换意群 */
 let sx = null, sy = null;
