@@ -146,6 +146,26 @@ button:active{filter:brightness(.95)}
 #fBody #drillPanel{border:none;padding:0;background:transparent;border-radius:0}
 .markbtn.slim{min-height:clamp(90px,15vh,140px);font-size:26px}
 
+/* favorites */
+.sheet{position:fixed;inset:0;z-index:50;display:grid;align-items:end;background:color-mix(in srgb,#000 40%,transparent)}
+.sheet .box{background:var(--panel);border-radius:18px 18px 0 0;padding:18px max(16px,env(safe-area-inset-right,0px)) calc(env(safe-area-inset-bottom,0px) + 16px) max(16px,env(safe-area-inset-left,0px));display:grid;gap:12px;max-width:720px;width:100%;margin:0 auto}
+.sheet .prev{font:600 20px/1.5 var(--f-display);overflow-wrap:anywhere}
+.types{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.types button.on{background:var(--mark);border-color:var(--mark);color:var(--mark-ink);font-weight:600}
+.favlist{display:grid;gap:10px}
+.fav{border:1px solid var(--line);border-radius:14px;padding:14px;display:grid;gap:8px;background:var(--panel)}
+.fav.playing{border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 25%,transparent)}
+.fav .ftext{font:600 20px/1.45 var(--f-display);overflow-wrap:anywhere}
+.fav .fsent{font-size:13px;color:var(--muted);overflow-wrap:anywhere}
+.fav .fsent b{color:var(--ink)}
+.ftag{font-size:12px;font-weight:600;padding:2px 9px;border-radius:999px;background:var(--mark-soft);color:var(--mark)}
+.ftag.t1{background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent)}
+.ftag.t2{background:var(--bg);color:var(--muted);border:1px solid var(--line)}
+.facts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.facts button{min-height:40px;padding:6px 8px;font-size:14px}
+.sent .tx .w.pick{outline:2px solid var(--mark);border-radius:4px}
+.favbtn.on{background:var(--mark-soft);border-color:var(--mark);color:var(--mark)}
+
 /* drill */
 .drill{display:grid;gap:14px}
 .seg{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line);border-radius:12px;overflow:hidden}
@@ -190,6 +210,7 @@ button:active{filter:brightness(.95)}
 <main class="screen" id="homeScreen">
   <div class="topbar">
     <h1>听点<span>.</span></h1>
+    <button class="iconbtn" id="openFav" aria-label="收藏夹">★</button>
     <button class="iconbtn" id="openSettings" aria-label="设置">⚙</button>
   </div>
   <p class="hint" style="margin:-6px 0 0">盲听时按“听不懂”，自动定位难点意群，练到熟悉再重听。</p>
@@ -295,11 +316,38 @@ button:active{filter:brightness(.95)}
   <span class="status" id="settingsStatus"></span>
 </main>
 
+<!-- ============ 收藏夹 ============ -->
+<main class="screen" id="favScreen" hidden>
+  <div class="topbar">
+    <button class="iconbtn" data-back aria-label="返回">‹</button>
+    <span class="title">收藏夹 <span class="hint" id="favCount"></span></span>
+  </div>
+  <div class="chips" id="favChips"></div>
+  <div class="grid2">
+    <button class="primary" id="favPlayAll">▶ 连续播放</button>
+    <label class="toggle" style="justify-content:center"><input type="checkbox" id="favWithCn"> 每条后读中文</label>
+  </div>
+  <span class="status" id="favStatus"></span>
+  <div class="favlist" id="favList"></div>
+</main>
+
+<div class="sheet" id="favSheet" hidden>
+  <div class="box" role="dialog" aria-label="收藏">
+    <b>收藏到收藏夹</b>
+    <div class="prev" id="favPrev"></div>
+    <div class="cnline" id="favPrevCn"></div>
+    <div class="types" id="favTypes"><button data-t="表达">表达</button><button data-t="连读弱读">连读弱读</button><button data-t="其他">其他</button></div>
+    <label class="f">备注（可不填）<input type="text" id="favNote" placeholder="比如：want to 读成 wanna" autocomplete="off"></label>
+    <div class="grid2"><button id="favCancel">取消</button><button class="primary" id="favSave">收藏</button></div>
+  </div>
+</div>
+
 <!-- ============ 练习 ============ -->
 <main class="screen work" id="workScreen" hidden>
   <div class="topbar">
     <button class="iconbtn" data-back aria-label="返回音频库">‹</button>
     <span class="title" id="workTitle"></span>
+    <button class="iconbtn" id="openFav2" aria-label="收藏夹">★</button>
   </div>
   <div class="stats" id="stats"></div>
   <audio id="audio" preload="auto"></audio>
@@ -353,6 +401,7 @@ button:active{filter:brightness(.95)}
     <div class="panel drill" id="drillPanel">
       <div class="row" style="justify-content:space-between">
         <span class="badge" id="drillPos">0 / 0</span>
+        <button class="small favbtn" id="drillFav">☆ 收藏</button>
         <label class="toggle"><input type="checkbox" id="cnHint"> 先看中文</label>
       </div>
       <div class="seg" role="group" aria-label="发音来源">
@@ -414,8 +463,8 @@ const native = (fn, ...a) => { try{ if (NATIVE && window.Android[fn]) return win
 const DB = (() => {
   let p;
   const open = () => p || (p = new Promise((res, rej) => {
-    const r = indexedDB.open('tingdian', 2);
-    r.onupgradeneeded = () => { for (const n of ['audio','sess','tts']) if (!r.result.objectStoreNames.contains(n)) r.result.createObjectStore(n); };
+    const r = indexedDB.open('tingdian', 3);
+    r.onupgradeneeded = () => { for (const n of ['audio','sess','tts','fav']) if (!r.result.objectStoreNames.contains(n)) r.result.createObjectStore(n); };
     r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
   }));
   const tx = async (store, mode, fn) => { const db = await open(); return new Promise((res, rej) => {
@@ -433,13 +482,16 @@ const DB = (() => {
 let screen = 'home';
 function show(name){
   screen = name;
-  for (const s of ['home','settings','work']) $(s+'Screen').hidden = s !== name;
+  for (const s of ['home','settings','work','fav']) $(s+'Screen').hidden = s !== name;
+  if (name !== 'fav') favStop();
   if (name !== 'work'){ audio.pause(); stopClip(); stopSpeak(); }
   syncNative();
   window.scrollTo(0,0);
 }
 document.querySelectorAll('[data-back]').forEach(b => b.onclick = () => goBack());
 function goBack(){
+  if (!$('favSheet').hidden){ closeFavSheet(); return true; }
+  if (screen === 'fav'){ show(favPrev || 'home'); if (favPrev === 'work' && view === 'fine') renderFine(); if (favPrev !== 'work') renderLib(); return true; }
   if (screen === 'settings'){ show(prevScreen || 'home'); if (prevScreen !== 'work') renderLib(); return true; }
   if (screen === 'work'){
     if (view !== 'listen'){ setView('listen'); return true; }
@@ -740,7 +792,7 @@ async function transcribe(key){
   }
 }
 
-let audioUrl = null;
+let audioUrl = null, playBlob = null;
 async function openSession(key){
   const s = await DB.get('sess', key);
   if (!s) return;
@@ -756,7 +808,8 @@ async function openSession(key){
     catch(e){ play = null; st.textContent = ''; console.warn('PCM 转换失败，改用原文件播放', e); }
   }
   if (audioUrl) URL.revokeObjectURL(audioUrl);
-  audioUrl = URL.createObjectURL(play || f); audio.src = audioUrl;
+  playBlob = play || f;
+  audioUrl = URL.createObjectURL(playBlob); audio.src = audioUrl;
   S = s; S.lastOpened = Date.now(); save();
   openWorkspace();
 }
@@ -768,11 +821,19 @@ async function makePcm(blob){
   const n = ab.length, c0 = ab.getChannelData(0), c1 = ab.numberOfChannels > 1 ? ab.getChannelData(1) : null;
   const pcm = new Int16Array(n);
   for (let i = 0; i < n; i++){ let v = c1 ? (c0[i] + c1[i]) * 0.5 : c0[i]; pcm[i] = Math.max(-1, Math.min(1, v)) * 32767; }
+  return new Blob([wavHeader(n), pcm.buffer], {type: 'audio/wav'});
+}
+function wavHeader(n){
   const h = new DataView(new ArrayBuffer(44)), str = (o, t) => [...t].forEach((c, i) => h.setUint8(o + i, c.charCodeAt(0)));
   str(0, 'RIFF'); h.setUint32(4, 36 + n * 2, true); str(8, 'WAVEfmt '); h.setUint32(16, 16, true);
   h.setUint16(20, 1, true); h.setUint16(22, 1, true); h.setUint32(24, 16000, true); h.setUint32(28, 32000, true);
   h.setUint16(32, 2, true); h.setUint16(34, 16, true); str(36, 'data'); h.setUint32(40, n * 2, true);
-  return new Blob([h.buffer, pcm.buffer], {type: 'audio/wav'});
+  return h.buffer;
+}
+/* 从精确播放用的 WAV 里裁出一小段（收藏用，删掉原节目后也能播放） */
+function wavSlice(blob, t0, t1){
+  const s0 = Math.max(0, Math.floor(t0 * 16000)), s1 = Math.max(s0 + 1, Math.floor(t1 * 16000));
+  return new Blob([wavHeader(s1 - s0), blob.slice(44 + s0 * 2, 44 + s1 * 2)], {type: 'audio/wav'});
 }
 
 /* ---------- 每日更新：播客订阅 ---------- */
@@ -990,6 +1051,174 @@ $('addFeed').onclick = async () => {
     renderFeedList(); renderEps();
   }catch(e){ st.className = 'status err'; st.textContent = '添加失败：' + e.message; }
 };
+
+/* ---------- 收藏夹：全局，所有音频共用 ---------- */
+let favs = [], favFilter = 'all', favDraft = null, favPrev = 'home';
+const FAV_TYPES = ['表达', '连读弱读', '其他'];
+async function loadFavs(){ favs = (await DB.all('fav').catch(() => [])).sort((a, b) => b.added - a.added); }
+const favKey = (a, b) => S.key + '|' + a + '-' + b;
+const isFav = (a, b) => !!S && favs.some(f => f.key === favKey(a, b));
+const rangeText = (a, b) => { const r = []; for (let i = a; i <= b; i++) r.push(wd(i)); return r.join(' '); };
+const suggestType = note => /连读|弱读|吞音|失去爆破|同化|省略|缩读|浊化|闪音|吞|略读/.test(note || '') ? '连读弱读' : '表达';
+function sentRangeOf(i){
+  if (S.sents?.length){ const k = sentOf(i); if (k >= 0) return [S.sents[k].a, S.sents[k].b, k]; }
+  return [Math.max(0, i - 8), Math.min(S.words.length - 1, i + 8), -1];
+}
+function favFromMark(m){
+  const [a, b] = groupRange(m);
+  if (isFav(a, b)) return removeFav(a, b);
+  openFavSheet(a, b, {cn: m.ana?.phrase_cn, sentCn: m.ana?.translation, note: m.ana?.sound});
+}
+function openFavSheet(a, b, extra = {}){
+  const [sa, sb, k] = sentRangeOf(a);
+  favDraft = {a, b, text: rangeText(a, b), cn: extra.cn || '', sentA: sa, sentB: Math.max(sb, b),
+    sentCn: extra.sentCn || (k >= 0 ? S.sentCn?.[k] : '') || '', aiNote: extra.note || '', type: suggestType(extra.note)};
+  $('favPrev').textContent = favDraft.text;
+  $('favPrevCn').textContent = favDraft.cn;
+  $('favNote').value = '';
+  $('favTypes').querySelectorAll('button').forEach(x => x.classList.toggle('on', x.dataset.t === favDraft.type));
+  $('favSheet').hidden = false;
+}
+function closeFavSheet(){ $('favSheet').hidden = true; favDraft = null; }
+$('favTypes').onclick = e => { const t = e.target.closest('[data-t]'); if (!t || !favDraft) return; favDraft.type = t.dataset.t; $('favTypes').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === t)); };
+$('favCancel').onclick = closeFavSheet;
+$('favSheet').onclick = e => { if (e.target === $('favSheet')) closeFavSheet(); };
+$('favSave').onclick = async () => {
+  const d = favDraft; if (!d) return;
+  const [t0, t1] = wordSpan(d.a, d.b);
+  const sent = []; for (let i = d.sentA; i <= d.sentB; i++) sent.push(i >= d.a && i <= d.b ? '<<' + wd(i) + '>>' : wd(i));
+  const item = {id: 'f' + Date.now(), key: favKey(d.a, d.b), sess: S.key, a: d.a, b: d.b, t0, t1,
+    text: d.text, cn: d.cn, sent: sent.join(' '), sentCn: d.sentCn, type: d.type,
+    note: $('favNote').value.trim(), aiNote: d.aiNote, source: S.name, added: Date.now(),
+    clip: playBlob && /wav/i.test(playBlob.type) ? wavSlice(playBlob, t0, t1) : null};
+  await DB.put('fav', item.id, item).catch(() => {});
+  favs.unshift(item);
+  closeFavSheet();
+  if (cfg.vibrate){ if (NATIVE) native('vibrate', 30); else try{ navigator.vibrate?.(30); }catch(e){} }
+  refreshFavButtons();
+  if (!item.cn || !item.aiNote) enrichFav(item);
+};
+async function removeFav(a, b){
+  const k = favKey(a, b);
+  for (const f of favs.filter(f => f.key === k)) await DB.del('fav', f.id).catch(() => {});
+  favs = favs.filter(f => f.key !== k);
+  refreshFavButtons();
+}
+function refreshFavButtons(){
+  if (screen !== 'work') return;
+  if (view === 'drill' || (view === 'fine' && F?.stage === 'group')) renderDrill();
+  if (view === 'review') renderCards();
+  if (view === 'fine') renderFine();
+}
+/* 收藏后让 AI 补上中文意思和讲解（只补空着的） */
+async function enrichFav(item){
+  if (!aiKey()) return;
+  try{
+    const j = await callAI('你是英语听力教练，帮助中文母语学习者积累口语表达和连读弱读。只输出 JSON。',
+      '学习者收藏了句子里用 << >> 标出的片段。返回：{"cn":"片段在本句中的中文意思","sentCn":"整句中文翻译","note":"一两句话：如果有连读、弱读、吞音等音变，具体说明实际怎么读；如果是地道表达，说明用法","type":"表达 或 连读弱读"}\n\n句子：' + item.sent, 800);
+    if (!item.cn) item.cn = j.cn || '';
+    if (!item.sentCn) item.sentCn = j.sentCn || '';
+    if (!item.aiNote) item.aiNote = j.note || '';
+    await DB.put('fav', item.id, item);
+    if (screen === 'fav') renderFavs();
+  }catch(e){}
+}
+
+/* 收藏夹页面 */
+const favAudio = new Audio();
+let favUrl = null, favPlayingId = null, favLoop = 0;
+function openFavs(){ favPrev = screen; show('fav'); renderFavs(); }
+$('openFav').onclick = openFavs;
+$('openFav2').onclick = () => { audio.pause(); stopClip(); openFavs(); };
+const favShown = () => favFilter === 'all' ? favs : favs.filter(f => f.type === favFilter);
+function renderFavs(){
+  $('favCount').textContent = favs.length ? `${favs.length} 条` : '';
+  $('favChips').innerHTML = ['all', ...FAV_TYPES].map(t => {
+    const n = t === 'all' ? favs.length : favs.filter(f => f.type === t).length;
+    return `<button class="chip${favFilter === t ? ' on' : ''}" data-ft="${t}">${t === 'all' ? '全部' : t} ${n}</button>`;
+  }).join('');
+  const list = favShown();
+  $('favPlayAll').disabled = !list.length;
+  if (!list.length){ $('favList').innerHTML = `<div class="empty">${favs.length ? '这个分类里还没有收藏。' : '还没有收藏。在意群练习、复习难点或逐句听里点“☆ 收藏”，把听懂的表达和连读弱读存到这里。'}</div>`; return; }
+  $('favList').innerHTML = list.map(f => {
+    const tcls = f.type === '连读弱读' ? 't1' : f.type === '其他' ? 't2' : '';
+    const sentHtml = esc(f.sent).replace(/&lt;&lt;(.*?)&gt;&gt;/g, '<b>$1</b>');
+    const d = new Date(f.added);
+    return `<div class="fav${favPlayingId === f.id ? ' playing' : ''}" data-id="${f.id}">
+      <div class="row" style="justify-content:space-between"><span class="ftag ${tcls}">${esc(f.type)}</span><span class="hint">${esc(f.source || '')} · ${d.getMonth() + 1}月${d.getDate()}日</span></div>
+      <div class="ftext">${esc(f.text)}</div>
+      ${f.cn ? `<div class="cnline">${esc(f.cn)}</div>` : ''}
+      ${f.text !== f.sent.replace(/<<|>>/g, '') ? `<div class="fsent">${sentHtml}${f.sentCn ? `<br>${esc(f.sentCn)}` : ''}</div>` : ''}
+      ${f.note ? `<div class="sound"><b>我的备注：</b>${esc(f.note)}</div>` : ''}
+      ${f.aiNote ? `<div class="hint">${esc(f.aiNote)}</div>` : ''}
+      <div class="facts">
+        <button data-fa="orig">▶ 原声</button><button data-fa="slow">慢速</button><button data-fa="tts">标准发音</button>
+        <button data-fa="zh">中文</button><button data-fa="type">换分类</button><button data-fa="del">删除</button>
+      </div></div>`;
+  }).join('');
+}
+$('favChips').onclick = e => { const c = e.target.closest('[data-ft]'); if (!c) return; favFilter = c.dataset.ft; renderFavs(); };
+function favPlayOrig(f, rate = 1){
+  return new Promise(async res => {
+    stopSpeak();
+    let blob = f.clip;
+    if (!blob){   // 旧收藏或没有 WAV 时，从原节目里取
+      const pcm = await DB.get('audio', f.sess + '|pcm').catch(() => null);
+      if (pcm) blob = wavSlice(pcm, f.t0, f.t1);
+    }
+    if (!blob){ await speak(f.text, 0.9 * rate); return res(); }
+    if (favUrl) URL.revokeObjectURL(favUrl);
+    favUrl = URL.createObjectURL(blob);
+    favAudio.src = favUrl; favAudio.playbackRate = rate;
+    favAudio.onended = favAudio.onerror = favAudio.onpause = () => res();
+    favAudio.play().catch(() => res());
+  });
+}
+let delArmed = null;
+$('favList').onclick = async e => {
+  const b = e.target.closest('[data-fa]'); if (!b) return;
+  const f = favs.find(x => x.id === b.closest('.fav').dataset.id); if (!f) return;
+  const a = b.dataset.fa;
+  if (a !== 'del' && a !== 'type') favStop(true);
+  if (a === 'orig') favPlayOrig(f, 1);
+  if (a === 'slow') favPlayOrig(f, 0.7);
+  if (a === 'tts') speak(f.text, 0.85);
+  if (a === 'zh') speakZh([f.cn, f.sentCn !== f.cn ? f.sentCn : '']);
+  if (a === 'type'){ f.type = FAV_TYPES[(FAV_TYPES.indexOf(f.type) + 1) % FAV_TYPES.length]; await DB.put('fav', f.id, f); renderFavs(); }
+  if (a === 'del'){
+    if (delArmed !== f.id){ delArmed = f.id; b.textContent = '确认删除'; b.style.color = 'var(--err)'; setTimeout(() => { if (delArmed === f.id){ delArmed = null; renderFavs(); } }, 3000); return; }
+    delArmed = null; await DB.del('fav', f.id); favs = favs.filter(x => x !== f); renderFavs();
+  }
+};
+/* 连续播放：原声 → 停顿 →（可选中文）→ 下一条 */
+async function favPlayAll(){
+  const list = favShown(); if (!list.length) return;
+  const tok = ++favLoop;
+  $('favPlayAll').textContent = '■ 停止';
+  native('setKeepScreenOn', true);
+  for (let i = 0; i < list.length && tok === favLoop; i++){
+    favPlayingId = list[i].id; renderFavs();
+    $('favList').querySelector('.fav.playing')?.scrollIntoView({block: 'center', behavior: 'smooth'});
+    $('favStatus').textContent = `正在播放 ${i + 1} / ${list.length}`;
+    await favPlayOrig(list[i], 1); if (tok !== favLoop) break;
+    await sleep(700); if (tok !== favLoop) break;
+    await favPlayOrig(list[i], 1); if (tok !== favLoop) break;
+    if ($('favWithCn').checked && list[i].cn){ await sleep(400); await speakZh([list[i].cn]); }
+    await sleep(1000);
+  }
+  if (tok === favLoop) favStop();
+}
+function favStop(keepStatus){
+  favLoop++; favPlayingId = null;
+  try{ favAudio.pause(); }catch(e){}
+  $('favPlayAll').textContent = '▶ 连续播放';
+  if (!keepStatus) $('favStatus').textContent = '';
+  if (screen === 'fav') renderFavs();
+}
+$('favPlayAll').onclick = () => favPlayingId ? favStop() : favPlayAll();
+$('favWithCn').onchange = e => LS.set('lh:favcn', e.target.checked);
+$('favWithCn').checked = LS.get('lh:favcn', false);
+loadFavs();
 
 /* ---------- 练习界面 ---------- */
 let reviewRound = 1;
@@ -1244,7 +1473,8 @@ function renderCards(){
         <button data-act="loop" data-id="${m.id}">慢速循环</button>
         <button data-act="ctx" data-id="${m.id}">听整句</button>
         <button data-act="ana" data-id="${m.id}">AI 分析</button>
-        <button class="${m.done?'on':''}" data-act="done" data-id="${m.id}" style="grid-column:span 2">${m.done?'已熟悉 ✓':'标为熟悉'}</button>
+        <button class="favbtn${isFav(...groupRange(m)) ? ' on' : ''}" data-act="fav" data-id="${m.id}">${isFav(...groupRange(m)) ? '★ 已收藏' : '☆ 收藏'}</button>
+        <button class="${m.done?'on':''}" data-act="done" data-id="${m.id}">${m.done?'已熟悉 ✓':'标为熟悉'}</button>
       </div>
       ${m.ana ? renderAna(m) : ''}
     </div>`;
@@ -1286,6 +1516,7 @@ function cardAction(el){
     save(); renderStats(); renderTicks(); markHardInTranscript(); renderRoundSel(); renderCards();
   }
   if (act === 'ana') analyze([m]);
+  if (act === 'fav') favFromMark(m);
   if (act === 'tts'){ stopClip(); speak(el.dataset.w, 0.8); }
   if (act === 'zh'){ stopClip(); speakZh([m.ana?.phrase_cn, m.ana?.translation]); }
   if (act === 'wplay'){
@@ -1472,12 +1703,13 @@ function renderFine(){
     const {a, b} = S.sents[k];
     const hard = new Set(sentMarks(k).flatMap(m => m.idx));
     const tx = fReveal
-      ? S.words.slice(a, b + 1).map((w, x) => `<span class="w${hard.has(a + x) ? ' sel' : ''}" data-i="${a + x}">${esc(wd(a + x))}</span>`).join(' ')
+      ? S.words.slice(a, b + 1).map((w, x) => `<span class="w${hard.has(a + x) ? ' sel' : ''}${fPick.start === a + x ? ' pick' : ''}" data-i="${a + x}">${esc(wd(a + x))}</span>`).join(' ')
       : esc(masked(sentText(k)));
     const nm = sentMarks(k).length;
     body = `<div class="row" style="justify-content:space-between"><span class="badge">本段第 ${k - s0 + 1} / ${s1 - s0 + 1} 句</span>${nm ? `<span class="hint" style="color:var(--mark)">已标记 ${nm} 处</span>` : ''}</div>
       <div class="sent"><div class="tx${fReveal ? '' : ' masked'}">${tx}</div>${fReveal ? `<div class="cn">${esc(S.sentCn[k] || '')}</div>` : ''}</div>
-      ${fReveal ? '<span class="hint" style="text-align:center">点单词可以把它加入或移出难点</span>' : ''}`;
+      ${fReveal ? `<div class="grid2"><button class="small favbtn${isFav(a, b) ? ' on' : ''}" data-fact="sent">${isFav(a, b) ? '★ 已收藏整句' : '☆ 收藏整句'}</button><button class="small${fPick.on ? ' on' : ''}" data-fact="pick">${fPick.on ? '取消选取' : '选取片段收藏'}</button></div>
+      <span class="hint" style="text-align:center">${fPick.on ? (fPick.start == null ? '点这个片段的第一个词' : '再点这个片段的最后一个词') : '点单词可以把它加入或移出难点'}</span>` : ''}`;
   } else {
     body = `<div class="slist">` + Array.from({length: s1 - s0 + 1}, (_, x) => {
       const k = s0 + x, nm = sentMarks(k).length;
@@ -1552,7 +1784,7 @@ $('fSlow').onclick = () => finePlay(true);
 $('fReveal').onclick = () => { fReveal = !fReveal; renderFine(); };
 const partMarks = () => { const [s0, s1] = partRange(F.part); const out = new Set(); for (let k = s0; k <= s1; k++) sentMarks(k).forEach(m => out.add(m)); return [...out].sort((a, b) => a.t - b.t); };
 function fineGo(stage, sent, play = true){
-  F.stage = stage; if (sent != null) F.sent = sent;
+  F.stage = stage; if (sent != null) F.sent = sent; fPick.on = false; fPick.start = null;
   fReveal = false; save(); stopClip(); stopSpeak();
   if (stage === 'group'){ D.src = ''; const need = partMarks().filter(m => !m.ana); if (need.length && aiKey()) analyze(need); }
   renderFine();
@@ -1577,11 +1809,27 @@ $('fPrev').onclick = () => {
 };
 $('fParts').onclick = e => { const c = e.target.closest('[data-p]'); if (!c) return; F.part = +c.dataset.p; fineGo('part', partRange(F.part)[0], false); };
 $('fSteps').onclick = e => { const sp = e.target.closest('[data-s]'); if (!sp) return; fineGo(sp.dataset.s, sp.dataset.s === 'sent' ? partRange(F.part)[0] : null, false); };
+const fPick = {on: false, start: null};
 $('fBody').onclick = e => {
   const row = e.target.closest('.sl');
   if (row) return fineGo('sent', +row.dataset.k);
+  const fb = e.target.closest('[data-fact]');
+  if (fb){
+    const {a, b} = S.sents[F.sent];
+    if (fb.dataset.fact === 'sent'){ if (isFav(a, b)) removeFav(a, b); else openFavSheet(a, b, {sentCn: S.sentCn[F.sent], cn: S.sentCn[F.sent]}); }
+    else { fPick.on = !fPick.on; fPick.start = null; renderFine(); }
+    return;
+  }
   const w = e.target.closest('.sent .w');
   if (!w) return;
+  if (fPick.on){
+    const i = +w.dataset.i;
+    if (fPick.start == null){ fPick.start = i; renderFine(); return; }
+    const a = Math.min(fPick.start, i), b = Math.max(fPick.start, i);
+    fPick.on = false; fPick.start = null; renderFine();
+    openFavSheet(a, b, {sentCn: S.sentCn[F.sent]});
+    return;
+  }
   /* 显示原文后，点词把它加入 / 移出这一句的难点 */
   const i = +w.dataset.i, k = sentOf(i);
   const m = sentMarks(k).find(m => m.sent === k) || sentMarks(k)[0];
@@ -1653,6 +1901,7 @@ function renderDrill(){
   $('srcTts').classList.toggle('on', D.voice === 'tts'); $('srcOrig').classList.toggle('on', D.voice === 'orig');
   for (const id of ['drillPlay','drillSlow','drillZh','drillReveal','drillPrev','drillNext','drillDone']) $(id).disabled = !n;
   const t = $('drillText');
+  if (!n) $('drillFav').disabled = true;
   if (!n){ t.className = 'hidden-text masked'; t.textContent = D.src === 'undone' ? '全部熟悉了，可以重新盲听' : '这个范围里没有难点'; $('drillAna').innerHTML = ''; $('drillCn').innerHTML = ''; return; }
   const showCn = D.reveal || $('cnHint').checked;
   const a = x.m.ana;
@@ -1666,6 +1915,8 @@ function renderDrill(){
   t.className = 'hidden-text' + (D.reveal ? '' : ' masked');
   t.textContent = D.reveal ? text : text.split(' ').map(w => '•'.repeat(Math.min(w.length, 8))).join('  ');
   $('drillReveal').textContent = D.reveal ? '隐藏文字' : '显示文字';
+  const fv = isFav(...groupRange(x.m));
+  $('drillFav').textContent = fv ? '★ 已收藏' : '☆ 收藏'; $('drillFav').classList.toggle('on', fv); $('drillFav').disabled = false;
   $('drillDone').textContent = x.m.done ? '已熟悉 ✓' : '标为熟悉';
   $('drillDone').classList.toggle('on', !!x.m.done);
   $('drillAna').innerHTML = D.reveal ? (a ? renderAna(x.m) : `<div class="row"><span class="hint grow">这个难点还没有 AI 讲解</span><button class="small" id="drillAnaBtn">AI 分析</button></div>`) : '';
@@ -1686,6 +1937,7 @@ function drillZh(){
 $('drillPlay').onclick = () => drillPlay(false);
 $('drillSlow').onclick = () => drillPlay(true);
 $('drillZh').onclick = drillZh;
+$('drillFav').onclick = () => { const x = D.list[D.i]; if (x) favFromMark(x.m); };
 $('drillRelisten').onclick = () => $('relisten').click();
 $('cnHint').onchange = e => { LS.set('lh:cnhint', e.target.checked); renderDrill(); };
 $('cnHint').checked = LS.get('lh:cnhint', false);
