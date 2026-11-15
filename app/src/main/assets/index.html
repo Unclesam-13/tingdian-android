@@ -22,9 +22,10 @@
   color-scheme:dark;}}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 [hidden]{display:none!important}
-html,body{height:100%}
+html,body{height:100%;overflow-x:hidden}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 var(--f-body);overscroll-behavior:none}
-.screen{min-height:100%;padding:calc(env(safe-area-inset-top,0px) + 12px) max(16px,env(safe-area-inset-right,0px)) calc(env(safe-area-inset-bottom,0px) + 24px) max(16px,env(safe-area-inset-left,0px));display:grid;gap:14px;align-content:start;max-width:720px;margin:0 auto}
+.screen{min-height:100%;padding:calc(env(safe-area-inset-top,0px) + 12px) max(16px,env(safe-area-inset-right,0px)) calc(env(safe-area-inset-bottom,0px) + 24px) max(16px,env(safe-area-inset-left,0px));display:grid;grid-template-columns:minmax(0,1fr);gap:14px;align-content:start;max-width:720px;margin:0 auto}
+.screen > *, section > *{min-width:0}
 .topbar{display:flex;align-items:center;gap:10px;min-height:44px}
 .topbar h1{font:700 26px/1.1 var(--f-display);margin:0;letter-spacing:-.01em;flex:1;min-width:0}
 .topbar h1 span{color:var(--mark)}
@@ -92,12 +93,12 @@ button:active{filter:brightness(.95)}
 .timeline .tick{position:absolute;top:0;bottom:0;width:3px;margin-left:-1px;background:var(--mark)}
 .timeline .head{position:absolute;top:0;bottom:0;width:2px;background:var(--accent)}
 .time{font:600 14px var(--f-mono);font-variant-numeric:tabular-nums;color:var(--muted)}
-.ctrls{display:grid;grid-template-columns:auto auto 1fr;gap:10px;align-items:center}
+.ctrls{display:grid;grid-template-columns:auto auto minmax(0,1fr);gap:10px;align-items:center}
 .play{width:64px;height:64px;border-radius:50%;font-size:24px;padding:0}
 .selects{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .markwrap{position:sticky;bottom:calc(var(--nav-h) + env(safe-area-inset-bottom,0px) + 10px);z-index:5}
-.markbtn{width:100%;min-height:clamp(120px,22vh,200px);font:700 30px var(--f-display);background:var(--mark);color:var(--mark-ink);border:none;border-radius:20px;letter-spacing:.04em;display:grid;place-items:center;align-content:center;gap:4px;box-shadow:0 6px 18px color-mix(in srgb,var(--mark) 35%,transparent);transition:transform .06s;user-select:none;-webkit-user-select:none}
-.markbtn small{font:400 13px var(--f-body);opacity:.9;letter-spacing:0}
+.markbtn{width:100%;min-height:clamp(60px,9vh,80px);font:700 22px var(--f-display);background:var(--mark);color:var(--mark-ink);border:none;border-radius:16px;letter-spacing:.04em;display:grid;place-items:center;align-content:center;gap:0;box-shadow:0 6px 18px color-mix(in srgb,var(--mark) 35%,transparent);transition:transform .06s;user-select:none;-webkit-user-select:none}
+.markbtn small{font:400 12px var(--f-body);opacity:.9;letter-spacing:0}
 .markbtn.flash{transform:scale(.97);filter:brightness(1.12)}
 .transcript{max-height:42vh;overflow:auto;line-height:2;background:var(--bg);border-radius:10px;padding:10px 12px;font-size:16px}
 .w{border-radius:4px;padding:1px 2px}
@@ -144,7 +145,7 @@ button:active{filter:brightness(.95)}
 .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .grid3 button{min-height:50px}
 #fBody #drillPanel{border:none;padding:0;background:transparent;border-radius:0}
-.markbtn.slim{min-height:clamp(90px,15vh,140px);font-size:26px}
+.markbtn.slim{min-height:clamp(56px,8vh,72px);font-size:20px}
 
 /* favorites */
 .sheet{position:fixed;inset:0;z-index:50;display:grid;align-items:end;background:color-mix(in srgb,#000 40%,transparent)}
@@ -165,6 +166,17 @@ button:active{filter:brightness(.95)}
 .facts button{min-height:40px;padding:6px 8px;font-size:14px}
 .sent .tx .w.pick{outline:2px solid var(--mark);border-radius:4px}
 .favbtn.on{background:var(--mark-soft);border-color:var(--mark);color:var(--mark)}
+
+/* 明听：字幕选取 */
+.transcript .w{cursor:pointer}
+.transcript .w.selr{background:var(--mark-soft);box-shadow:0 0 0 1.5px var(--mark);color:var(--ink)}
+.selbar{position:sticky;bottom:calc(var(--nav-h) + env(safe-area-inset-bottom,0px) + 10px);z-index:6;background:var(--panel);border:1px solid var(--mark);border-radius:16px;padding:12px;display:grid;gap:10px;box-shadow:0 6px 20px color-mix(in srgb,#000 18%,transparent);max-height:40vh;overflow:auto}
+.selbar .shead{display:flex;gap:8px;align-items:center}
+.selbar .stext{flex:1;min-width:0;font:600 16px/1.4 var(--f-display);overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.selbar .sacts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.selbar .sacts button{min-height:40px;padding:6px 4px;font-size:14px}
+.look{display:grid;gap:6px;border-top:1px dashed var(--line);padding-top:8px}
+.look .ipa{font-family:var(--f-mono);font-size:13px;color:var(--muted)}
 
 /* drill */
 .drill{display:grid;gap:14px}
@@ -354,6 +366,7 @@ button:active{filter:brightness(.95)}
 
   <!-- 盲听 -->
   <section id="listenView" style="display:grid;gap:14px">
+    <div class="seg" id="lmode" role="group" aria-label="听的方式"><button data-m="blind" class="on">盲听</button><button data-m="open">明听（看字幕）</button></div>
     <div class="timeline" id="timeline"><div class="prog" id="prog"></div><div class="head" id="head"></div></div>
     <div class="ctrls">
       <button class="play primary" id="playBtn" aria-label="播放">▶</button>
@@ -362,7 +375,7 @@ button:active{filter:brightness(.95)}
     </div>
     <div class="selects">
       <label class="f">语速<select id="rate"><option value="0.75">0.75×</option><option value="0.9">0.9×</option><option value="1" selected>1.0×</option><option value="1.15">1.15×</option></select></label>
-      <label class="f">字幕<select id="subMode"><option value="none">隐藏（盲听）</option><option value="en">英文</option><option value="both">中英对照</option><option value="cn">仅中文</option></select></label>
+      <label class="f" id="subLabel" hidden>字幕<select id="subMode"><option value="en">英文</option><option value="both">中英对照</option><option value="cn">仅中文</option></select></label>
     </div>
     <div class="transcript" id="transcript" hidden></div>
     <span class="status" id="listenStatus">按 ▶ 开始盲听，听不懂就按下面的大按钮。</span>
@@ -370,7 +383,15 @@ button:active{filter:brightness(.95)}
       <button id="clearMarks">清空本轮标记</button>
       <button class="primary" id="toDrill">听完了，分段精听</button>
     </div>
-    <div class="markwrap"><button class="markbtn" id="markBtn">听不懂<small id="markHint">也可以按音量键</small></button></div>
+    <div class="selbar" id="selBar" hidden>
+      <div class="shead"><span class="stext" id="selText"></span><button class="small" id="selClose" aria-label="取消选择">✕</button></div>
+      <div class="sacts">
+        <button class="primary" data-sa="play">▶ 原句</button><button data-sa="slow">慢速</button><button data-sa="from">从这里播放</button>
+        <button data-sa="look">查词</button><button data-sa="mark">加入精听</button><button class="favbtn" data-sa="fav">☆ 收藏</button>
+      </div>
+      <div id="selInfo"></div>
+    </div>
+    <div class="markwrap" id="markWrapL"><button class="markbtn" id="markBtn">听不懂<small id="markHint">也可以按音量键</small></button></div>
   </section>
 
   <!-- 分段精听 -->
@@ -1106,6 +1127,7 @@ async function removeFav(a, b){
 }
 function refreshFavButtons(){
   if (screen !== 'work') return;
+  if (view === 'listen' && sel) renderSel();
   if (view === 'drill' || (view === 'fine' && F?.stage === 'group')) renderDrill();
   if (view === 'review') renderCards();
   if (view === 'fine') renderFine();
@@ -1227,11 +1249,12 @@ function openWorkspace(){
   reviewRound = S.round;
   $('workTitle').textContent = S.name;
   show('work');
-  setSubMode('none');
-  renderTranscript(); renderTicks(); renderStats(); setView('listen');
+  if (!S.sents?.length || !S.wdisp){ S.sents = buildSentences(); save(); }   // 顺便把标点对齐回字幕
+  sel = null;
+  renderTranscript(); renderTicks(); renderStats(); setView('listen'); setListenMode(lmode);
 }
 function setView(v){
-  view = v; stopClip(); stopSpeak();
+  view = v; stopClip(); stopSpeak(); if (v !== 'listen' && sel){ sel = null; renderSel(); }
   for (const k of ['listen','fine','review','drill']){
     $(k+'View').hidden = v !== k;
     $('tab'+k[0].toUpperCase()+k.slice(1)).classList.toggle('on', v===k);
@@ -1306,7 +1329,19 @@ function setSubMode(mode){
   tr.className = 'transcript mode-' + mode;
   if ((mode === 'both' || mode === 'cn') && S && S.segments?.length && !(S.segCn && S.segCn.filter(Boolean).length >= S.segments.length)) translateSubs();
 }
-$('subMode').onchange = e => setSubMode(e.target.value);
+let lmode = LS.get('lh:lmode', 'blind'), subLang = LS.get('lh:sublang', 'en');
+/* 盲听：隐藏字幕；明听：显示字幕，可以选词、选句来听 */
+function setListenMode(m){
+  lmode = m; LS.set('lh:lmode', m);
+  $('lmode').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.m === m));
+  $('subLabel').hidden = m === 'blind';
+  clearSel();
+  setSubMode(m === 'blind' ? 'none' : subLang);
+  $('listenStatus').className = 'status';
+  $('listenStatus').textContent = m === 'blind' ? '按 ▶ 开始盲听，听不懂就按下面的按钮。' : '点字幕里的一个词，再点另一个词，就选中这一段；点句子空白处选中整句。';
+}
+$('lmode').onclick = e => { const b = e.target.closest('[data-m]'); if (b) setListenMode(b.dataset.m); };
+$('subMode').onchange = e => { subLang = e.target.value; LS.set('lh:sublang', subLang); setSubMode(subLang); };
 
 let wseg = [], lastSeg = -1, lastNow = -1;
 function renderTranscript(){
@@ -1317,18 +1352,95 @@ function renderTranscript(){
   } else {
     wseg = S.words.map(w => { let k = 0; for (let j = 0; j < segs.length; j++) if (segs[j].s <= w.s + 0.05) k = j; return k; });
     const lines = segs.map(() => []);
-    S.words.forEach((w,i) => lines[wseg[i]].push(`<span class="w" data-i="${i}">${esc(w.w)}</span>`));
+    S.words.forEach((w,i) => lines[wseg[i]].push(`<span class="w" data-i="${i}">${esc(wd(i))}</span>`));
     $('transcript').innerHTML = lines.map((ws,k) => `<div class="sline" data-k="${k}"><div class="en">${ws.join(' ')}</div><div class="cn">${esc(S.segCn?.[k] || '')}</div></div>`).join('');
   }
   lastSeg = -1; lastNow = -1;
   markHardInTranscript();
+  if (sel) renderSel();
 }
+/* 选取：点一个词选中它；再点另一个词选中两者之间；点句子空白处选中整句 */
+let sel = null;
 $('transcript').onclick = e => {
-  const i = e.target.dataset?.i;
-  if (i != null){ stopClip(); audio.currentTime = S.words[i].s; return; }
+  const w = e.target.closest('.w');
+  if (w){
+    const i = +w.dataset.i;
+    if (!sel) sel = {a: i, b: i};
+    else if (sel.a === sel.b) sel = i === sel.a ? null : {a: Math.min(sel.a, i), b: Math.max(sel.a, i)};
+    else sel = {a: i, b: i};
+    return renderSel();
+  }
   const ln = e.target.closest('.sline');
-  if (ln){ stopClip(); audio.currentTime = S.segments[+ln.dataset.k].s; }
+  if (ln){
+    const k = +ln.dataset.k; let a = -1, b = -1;
+    wseg.forEach((x, i) => { if (x === k){ if (a < 0) a = i; b = i; } });
+    if (a >= 0){ sel = {a, b}; renderSel(); }
+  }
 };
+function renderSel(){
+  const tr = $('transcript');
+  tr.querySelectorAll('.w.selr').forEach(el => el.classList.remove('selr'));
+  $('selBar').hidden = !sel; $('markWrapL').hidden = !!sel;
+  if (!sel) return;
+  for (let i = sel.a; i <= sel.b; i++) tr.querySelector(`.w[data-i="${i}"]`)?.classList.add('selr');
+  $('selText').textContent = rangeText(sel.a, sel.b);
+  const fv = isFav(sel.a, sel.b), fb = $('selBar').querySelector('[data-sa="fav"]');
+  fb.textContent = fv ? '★ 已收藏' : '☆ 收藏'; fb.classList.toggle('on', fv);
+  const inMark = S.marks.some(m => m.idx[0] === sel.a && m.idx[m.idx.length - 1] === sel.b);
+  $('selBar').querySelector('[data-sa="mark"]').textContent = inMark ? '✓ 已在精听' : '加入精听';
+  const lk = S.lookups?.[sel.a + '-' + sel.b];
+  $('selInfo').innerHTML = lk ? lookupHtml(lk) : '';
+}
+function clearSel(){ sel = null; if (S) renderSel(); }
+$('selClose').onclick = clearSel;
+$('selBar').onclick = e => {
+  const b = e.target.closest('[data-sa]'); if (!b || !sel) return;
+  const {a, b: z} = sel, act = b.dataset.sa;
+  if (act === 'play') playClip(...wordSpan(a, z), {id: 'sel'});
+  if (act === 'slow') playClip(...wordSpan(a, z), {id: 'sel', rate: 0.7});
+  if (act === 'from'){ stopClip(); stopSpeak(); audio.currentTime = wordSpan(a, a)[0]; audio.playbackRate = +$('rate').value; audio.play(); }
+  if (act === 'look') lookupSel();
+  if (act === 'tts'){ stopClip(); speak(rangeText(a, z).replace(/[^\w\s'’-]/g, ''), 0.85); }
+  if (act === 'fav'){ if (isFav(a, z)) removeFav(a, z); else { const lk = S.lookups?.[a + '-' + z]; openFavSheet(a, z, {cn: lk?.cn, note: lk?.sound}); } }
+  if (act === 'mark'){
+    if (S.marks.some(m => m.idx[0] === a && m.idx[m.idx.length - 1] === z)) return;
+    const idx = []; for (let i = a; i <= z; i++) idx.push(i);
+    S.marks.push({id: Date.now(), t: S.words[z].e + cfg.lag + 0.01, idx, done: false, ana: null, from: 'open'});
+    S.marks.sort((x, y) => x.t - y.t);
+    save(); renderTicks(); renderStats(); markHardInTranscript(); renderSel();
+    if (cfg.vibrate){ if (NATIVE) native('vibrate', 30); else try{ navigator.vibrate?.(30); }catch(e){} }
+    $('listenStatus').className = 'status';
+    $('listenStatus').textContent = `已加入精听（本轮共 ${S.marks.length} 处），可以在分段精听和意群汇总里练`;
+  }
+};
+/* 查词：结合所在句子，让 AI 给出读音、意思、用法和音变 */
+function lookupHtml(j){
+  const words = (j.words || []).map(w => `<div class="wchip"><span class="wd"><b>${esc(w.word)}</b><span class="ipa">${esc(w.ipa || '')}</span><span class="mn">${esc(w.meaning || '')}</span></span><button data-sa="ttsw" data-w="${esc(w.word)}">标准</button><span></span></div>`).join('');
+  return `<div class="look">
+    <div class="row" style="gap:8px"><b>${esc(j.text || '')}</b><span class="ipa">${esc(j.ipa || '')}</span><span class="grow"></span><button class="small" data-sa="tts">标准发音</button></div>
+    ${j.cn ? `<div class="cnline">${esc(j.cn)}</div>` : ''}
+    ${j.explain ? `<div class="hint" style="font-size:13px">${esc(j.explain)}</div>` : ''}
+    ${j.sound ? `<div class="sound"><b>发音：</b>${esc(j.sound)}</div>` : ''}
+    ${words ? `<div class="wl">${words}</div>` : ''}
+  </div>`;
+}
+$('selInfo').addEventListener('click', e => { const b = e.target.closest('[data-sa="ttsw"]'); if (b){ e.stopPropagation(); stopClip(); speak(b.dataset.w, 0.8); } });
+async function lookupSel(){
+  const {a, b} = sel, key = a + '-' + b;
+  S.lookups = S.lookups || {};
+  if (S.lookups[key]) return renderSel();
+  if (!aiKey()){ $('selInfo').innerHTML = '<span class="status err">请先在设置里填写 AI 用的 API Key</span>'; return; }
+  $('selInfo').innerHTML = '<span class="hint">正在查询…</span>';
+  const [sa, sb] = sentRangeOf(a);
+  const sent = []; for (let i = Math.min(sa, a); i <= Math.max(sb, b); i++) sent.push(i >= a && i <= b ? '<<' + wd(i) + '>>' : wd(i));
+  try{
+    const j = await callAI('你是英语老师，帮助中文母语学习者理解听力材料。只输出 JSON。',
+      '学习者在句子里选中了用 << >> 标出的部分，请结合上下文解释。返回：{"ipa":"选中部分的音标（按口语实际读音；整句太长可留空）","cn":"在本句中的中文意思","explain":"词性/用法/固定搭配说明，一两句","sound":"如果读的时候有连读、弱读、吞音、失去爆破等，具体说明实际怎么读；没有就留空","words":[{"word":"选中部分里值得注意的单词","ipa":"/音标/","meaning":"在本句中的意思"}]}\n\n句子：' + sent.join(' '), 1200);
+    j.text = rangeText(a, b);
+    S.lookups[key] = j; save();
+    if (sel && sel.a === a && sel.b === b) renderSel();
+  }catch(err){ if (sel && sel.a === a && sel.b === b) $('selInfo').innerHTML = `<span class="status err">查询失败：${esc(err.message)}</span>`; }
+}
 function markHardInTranscript(){
   const hard = new Set(S.marks.flatMap(m => m.idx));
   $('transcript').querySelectorAll('.w').forEach(el => el.classList.toggle('hard', hard.has(+el.dataset.i)));
@@ -1677,8 +1789,9 @@ function renderFine(){
   const [s0, s1] = partRange(F.part), n = partCount();
   $('fWhere').textContent = `第 ${F.part + 1} / ${n} 段 · 第 ${s0 + 1}–${s1 + 1} 句`;
   $('fParts').innerHTML = Array.from({length: n}, (_, p) => {
-    const [a, b] = partRange(p); let cnt = 0;
-    for (let k = a; k <= b; k++) cnt += sentMarks(k).length;
+    const [a, b] = partRange(p); const us = new Set();
+    for (let k = a; k <= b; k++) sentMarks(k).forEach(m => us.add(m));
+    const cnt = us.size;
     const sub = F.done[p] ? '✓' : cnt ? `<span class="dot">●${cnt}</span>` : '&nbsp;';
     return `<button class="pchip${p === F.part ? ' on' : ''}${F.done[p] ? ' done' : ''}" data-p="${p}">${p + 1}<small>${sub}</small></button>`;
   }).join('');
@@ -1967,7 +2080,7 @@ $('relisten').onclick = () => {
   S.round += 1; S.marks = []; reviewRound = S.round;
   if (S.fine) S.fine = {size: S.fine.size, part: 0, stage: 'part', sent: 0, done: {}};
   save(); renderTicks(); renderStats(); markHardInTranscript();
-  audio.currentTime = 0; setSubMode('none');
+  audio.currentTime = 0; setListenMode('blind');
   setView('listen');
   $('listenStatus').textContent = `第 ${S.round} 轮开始，按 ▶ 盲听。`;
 };
