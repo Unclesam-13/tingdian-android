@@ -177,7 +177,13 @@ button:active{filter:brightness(.95)}
 .lsp .ltx{user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:none}
 .lsp .lw.rng{background:var(--mark-soft);box-shadow:0 0 0 1.5px var(--mark);color:var(--ink)}
 .lsp .lw.rng.now{background:var(--accent);color:var(--accent-ink)}
-.rngbar{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.wrows{display:grid}
+.wrow{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:4px 10px;align-items:center;padding:6px 0;border-top:1px solid var(--line)}
+.wrow b{font-family:var(--f-display);font-size:16px}
+.wrow .ipa{font-family:var(--f-mono);font-size:12px;color:var(--muted);margin-left:6px}
+.wrow .mn{font-size:14px;overflow-wrap:anywhere}
+.wrow button{min-height:32px;padding:2px 10px;font-size:13px}
+.rngbar{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
 .rngbar button{min-height:38px;padding:4px;font-size:13px;white-space:nowrap}
 .lsp .grid3 button{white-space:nowrap;padding-inline:4px}
 .lsp .lcn{text-align:center;color:var(--accent);font-size:15px}
@@ -401,7 +407,9 @@ button:active{filter:brightness(.95)}
       <div class="lcn" id="lsCn"></div>
       <div id="lsRngBox" hidden style="display:grid;gap:6px">
         <span class="hint" id="lsRngText" style="text-align:center"></span>
-        <div class="rngbar"><button class="primary" data-r="play">▶ 再听</button><button data-r="slow">慢速</button><button data-r="mark">加入精听</button><button data-r="close">✕ 取消</button></div>
+        <div class="rngbar"><button class="primary" data-r="play">▶ 再听</button><button data-r="slow">慢速</button><button data-r="mean" id="lsMeanBtn">显示含义</button>
+          <button data-r="mark">加入精听</button><button class="favbtn" data-r="fav" id="lsRngFav">☆ 收藏</button><button data-r="close">✕ 取消</button></div>
+        <div id="lsRngInfo"></div>
       </div>
       <span class="hint" style="text-align:center">轻点一个词单独听；长按一个词再滑动，可以选中连续几个词一起听</span>
       <div class="grid3">
@@ -1162,7 +1170,7 @@ async function removeFav(a, b){
 function refreshFavButtons(){
   if (screen !== 'work') return;
   if (view === 'listen' && sel) renderSel();
-  if (view === 'listen' && pmode === 'sent') renderLs();
+  if (view === 'listen' && pmode === 'sent'){ const keep = lsRng; renderLs(); lsRng = keep; renderRng(); }
   if (view === 'drill' || (view === 'fine' && F?.stage === 'group')) renderDrill();
   if (view === 'review') renderCards();
   if (view === 'fine') renderFine();
@@ -1531,8 +1539,39 @@ function renderRng(){
   if (!lsRng) return;
   for (let i = lsRng.a; i <= lsRng.b; i++) $('lsText').querySelector(`.lw[data-i="${i}"]`)?.classList.add('rng');
   const n = lsRng.b - lsRng.a + 1;
-  $('lsRngText').textContent = lsReveal ? `已选：${rangeText(lsRng.a, lsRng.b)}` : `已选 ${n} 个词`;
+  $('lsRngText').textContent = (lsReveal || lsMean) ? `已选：${rangeText(lsRng.a, lsRng.b)}` : `已选 ${n} 个词`;
+  $('lsMeanBtn').textContent = lsMean ? '隐藏含义' : '显示含义';
+  $('lsMeanBtn').classList.toggle('on', lsMean);
+  const fv = isFav(lsRng.a, lsRng.b);
+  $('lsRngFav').textContent = fv ? '★ 已收藏' : '☆ 收藏'; $('lsRngFav').classList.toggle('on', fv);
+  renderRngInfo();
 }
+/* 显示含义：选中的单词 + 每个词和整段在本句中的中文意思 */
+let lsMean = LS.get('lh:lsmean', false);
+function renderRngInfo(){
+  const box = $('lsRngInfo');
+  if (!lsRng || !lsMean){ box.innerHTML = ''; return; }
+  const {a, b} = lsRng, j = S.lookups?.[a + '-' + b];
+  if (j){
+    const rows = (j.words || []).filter(w => (w.word || '').trim()).map(w => `<div class="wrow"><span><b>${esc(w.word)}</b><span class="ipa">${esc(w.ipa || '')}</span></span><span class="mn">${esc(w.meaning || '')}</span><button data-sa="ttsw" data-w="${esc(w.word)}" aria-label="标准发音">🔈</button></div>`).join('');
+    box.innerHTML = `<div class="look">
+      <div class="row" style="gap:8px"><span class="cnline grow" style="font-size:16px">${esc(j.cn || '')}</span><button class="small" data-sa="tts">🔈 整段</button></div>
+      ${j.sound ? `<div class="sound" style="font-size:13px"><b>发音：</b>${esc(j.sound)}</div>` : ''}
+      ${rows ? `<div class="wrows">${rows}</div>` : ''}
+      ${j.explain ? `<div class="hint">${esc(j.explain)}</div>` : ''}
+    </div>`;
+    return;
+  }
+  box.innerHTML = '<span class="hint">正在查询中文意思…</span>';
+  fetchLookup(a, b).then(() => { if (lsRng && lsRng.a === a && lsRng.b === b) renderRngInfo(); })
+    .catch(err => { if (lsRng && lsRng.a === a && lsRng.b === b) box.innerHTML = `<span class="status err">查询失败：${esc(err.message)}</span>`; });
+}
+$('lsRngInfo').addEventListener('click', e => {
+  const b = e.target.closest('[data-sa]'); if (!b || !lsRng) return;
+  e.stopPropagation(); lwStop(); stopClip();
+  if (b.dataset.sa === 'ttsw') speak(b.dataset.w, 0.8);
+  if (b.dataset.sa === 'tts'){ const w = []; for (let i = lsRng.a; i <= lsRng.b; i++) w.push(cleanWord(i)); speak(w.join(' '), 0.85); }
+});
 function lsPlayRange(slow){
   if (!lsRng) return;
   const {a, b} = lsRng;
@@ -1585,6 +1624,12 @@ $('lsRngBox').onclick = e => {
   if (r === 'play') lsPlayRange(false);
   if (r === 'slow') lsPlayRange(true);
   if (r === 'close'){ lsRng = null; renderRng(); stopClip(); stopSpeak(); }
+  if (r === 'mean'){ lsMean = !lsMean; LS.set('lh:lsmean', lsMean); renderRng(); }
+  if (r === 'fav'){
+    const {a, b: z} = lsRng;
+    if (isFav(a, z)) removeFav(a, z).then(renderRng);
+    else { const lk = S.lookups?.[a + '-' + z]; openFavSheet(a, z, {cn: lk?.cn, note: lk?.sound}); }
+  }
   if (r === 'mark'){
     const {a, b: z} = lsRng, k = LS_K();
     if (!S.marks.some(m => m.idx[0] === a && m.idx[m.idx.length - 1] === z)){
@@ -1695,21 +1740,28 @@ function lookupHtml(j){
   </div>`;
 }
 $('selInfo').addEventListener('click', e => { const b = e.target.closest('[data-sa="ttsw"]'); if (b){ e.stopPropagation(); stopClip(); speak(b.dataset.w, 0.8); } });
-async function lookupSel(){
-  const {a, b} = sel, key = a + '-' + b;
+/* 查第 a～b 个词在句中的意思（结果保存在 S.lookups，明听和一句一句共用） */
+const lookupInflight = {};
+function fetchLookup(a, b){
+  const key = a + '-' + b;
   S.lookups = S.lookups || {};
-  if (S.lookups[key]) return renderSel();
-  if (!aiKey()){ $('selInfo').innerHTML = '<span class="status err">请先在设置里填写 AI 用的 API Key</span>'; return; }
-  $('selInfo').innerHTML = '<span class="hint">正在查询…</span>';
+  if (S.lookups[key]) return Promise.resolve(S.lookups[key]);
+  if (!aiKey()) return Promise.reject(new Error('请先在设置里填写 AI 用的 API Key'));
+  if (lookupInflight[key]) return lookupInflight[key];
   const [sa, sb] = sentRangeOf(a);
   const sent = []; for (let i = Math.min(sa, a); i <= Math.max(sb, b); i++) sent.push(i >= a && i <= b ? '<<' + wd(i) + '>>' : wd(i));
-  try{
-    const j = await callAI('你是英语老师，帮助中文母语学习者理解听力材料。只输出 JSON。',
-      '学习者在句子里选中了用 << >> 标出的部分，请结合上下文解释。返回：{"ipa":"选中部分的音标（按口语实际读音；整句太长可留空）","cn":"在本句中的中文意思","explain":"词性/用法/固定搭配说明，一两句","sound":"如果读的时候有连读、弱读、吞音、失去爆破等，具体说明实际怎么读；没有就留空","words":[{"word":"选中部分里值得注意的单词","ipa":"/音标/","meaning":"在本句中的意思"}]}\n\n句子：' + sent.join(' '), 1200);
-    j.text = rangeText(a, b);
-    S.lookups[key] = j; save();
-    if (sel && sel.a === a && sel.b === b) renderSel();
-  }catch(err){ if (sel && sel.a === a && sel.b === b) $('selInfo').innerHTML = `<span class="status err">查询失败：${esc(err.message)}</span>`; }
+  const sess = S;
+  return lookupInflight[key] = callAI('你是英语老师，帮助中文母语学习者理解听力材料。只输出 JSON。',
+    '学习者在句子里选中了用 << >> 标出的部分，请结合上下文解释。返回：{"ipa":"选中部分的音标（按口语实际读音；整句太长可留空）","cn":"选中部分在本句中的中文意思","explain":"词性/用法/固定搭配说明，一两句","sound":"如果读的时候有连读、弱读、吞音、失去爆破等，具体说明实际怎么读；没有就留空","words":[{"word":"单词","ipa":"/音标/","meaning":"在本句中的中文意思"}]}。words：选中部分不超过 8 个词时，按顺序列出其中每一个单词；更长时只列值得注意的单词。\n\n句子：' + sent.join(' '), 1500)
+    .then(j => { j.text = rangeText(a, b); sess.lookups = sess.lookups || {}; sess.lookups[key] = j; if (sess === S) save(); return j; })
+    .finally(() => { delete lookupInflight[key]; });
+}
+async function lookupSel(){
+  const {a, b} = sel;
+  if (S.lookups?.[a + '-' + b]) return renderSel();
+  $('selInfo').innerHTML = '<span class="hint">正在查询…</span>';
+  try{ await fetchLookup(a, b); if (sel && sel.a === a && sel.b === b) renderSel(); }
+  catch(err){ if (sel && sel.a === a && sel.b === b) $('selInfo').innerHTML = `<span class="status err">查询失败：${esc(err.message)}</span>`; }
 }
 function markHardInTranscript(){
   const hard = new Set(S.marks.flatMap(m => m.idx));
