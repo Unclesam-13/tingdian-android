@@ -167,6 +167,16 @@ button:active{filter:brightness(.95)}
 .sent .tx .w.pick{outline:2px solid var(--mark);border-radius:4px}
 .favbtn.on{background:var(--mark-soft);border-color:var(--mark);color:var(--mark)}
 
+/* 一句一句 */
+.lsp{display:grid;gap:10px}
+.lsp .ltx{font:600 21px/1.7 var(--f-display);text-align:center;overflow-wrap:anywhere;padding:6px 0;min-height:70px;display:flex;flex-wrap:wrap;justify-content:center;align-content:center;gap:2px 8px}
+.lsp .lw{cursor:pointer;border-radius:6px;padding:0 3px;transition:background .1s}
+.lsp .ltx.masked .lw{color:var(--muted);letter-spacing:.14em;font-weight:500}
+.lsp .lw.now{background:var(--accent);color:var(--accent-ink)!important}
+.lsp .lw.hard{box-shadow:inset 0 -3px 0 var(--mark)}
+.lsp .grid3 button{white-space:nowrap;padding-inline:4px}
+.lsp .lcn{text-align:center;color:var(--accent);font-size:15px}
+
 /* 明听：字幕选取 */
 .transcript .w{cursor:pointer}
 .transcript .w.selr{background:var(--mark-soft);box-shadow:0 0 0 1.5px var(--mark);color:var(--ink)}
@@ -368,7 +378,8 @@ button:active{filter:brightness(.95)}
   <section id="listenView" style="display:grid;gap:14px">
     <div class="seg" id="lmode" role="group" aria-label="听的方式"><button data-m="blind" class="on">盲听</button><button data-m="open">明听（看字幕）</button></div>
     <div class="timeline" id="timeline"><div class="prog" id="prog"></div><div class="head" id="head"></div></div>
-    <div class="ctrls">
+    <div class="seg" id="pmode" role="group" aria-label="播放方式"><button data-p="cont" class="on">整段连续</button><button data-p="sent">一句一句</button></div>
+    <div class="ctrls" id="contCtrls">
       <button class="play primary" id="playBtn" aria-label="播放">▶</button>
       <button id="backBtn">↺ 3秒</button>
       <span class="time" id="timeLabel" style="text-align:right">00:00.0 / 00:00.0</span>
@@ -378,6 +389,18 @@ button:active{filter:brightness(.95)}
       <label class="f" id="subLabel" hidden>字幕<select id="subMode"><option value="en">英文</option><option value="both">中英对照</option><option value="cn">仅中文</option></select></label>
     </div>
     <div class="transcript" id="transcript" hidden></div>
+    <div class="panel lsp" id="lsPanel" hidden>
+      <div class="row" style="justify-content:space-between"><span class="badge" id="lsPos">第 1 句</span><span class="hint" id="lsMarks"></span></div>
+      <div class="ltx masked" id="lsText"></div>
+      <div class="lcn" id="lsCn"></div>
+      <div class="grid3">
+        <button class="primary" id="lsPlay">▶ 播放</button><button id="lsSlow">慢速</button><button id="lsWords">逐词</button>
+      </div>
+      <div class="grid3">
+        <button id="lsPrev">‹ 上一句</button><button id="lsReveal">看原文</button><button class="primary" id="lsNext">下一句 ›</button>
+      </div>
+      <label class="toggle"><input type="checkbox" id="lsAuto"> 播完自动下一句</label>
+    </div>
     <span class="status" id="listenStatus">按 ▶ 开始盲听，听不懂就按下面的大按钮。</span>
     <div class="grid2">
       <button id="clearMarks">清空本轮标记</button>
@@ -1128,6 +1151,7 @@ async function removeFav(a, b){
 function refreshFavButtons(){
   if (screen !== 'work') return;
   if (view === 'listen' && sel) renderSel();
+  if (view === 'listen' && pmode === 'sent') renderLs();
   if (view === 'drill' || (view === 'fine' && F?.stage === 'group')) renderDrill();
   if (view === 'review') renderCards();
   if (view === 'fine') renderFine();
@@ -1250,10 +1274,12 @@ function openWorkspace(){
   $('workTitle').textContent = S.name;
   show('work');
   if (!S.sents?.length || !S.wdisp){ S.sents = buildSentences(); save(); }   // 顺便把标点对齐回字幕
+  S.sentCn = S.sentCn || {};
   sel = null;
   renderTranscript(); renderTicks(); renderStats(); setView('listen'); setListenMode(lmode);
 }
 function setView(v){
+  if (typeof lwStop === 'function'){ lwStop(); clearTimeout(lsAutoT); }
   view = v; stopClip(); stopSpeak(); if (v !== 'listen' && sel){ sel = null; renderSel(); }
   for (const k of ['listen','fine','review','drill']){
     $(k+'View').hidden = v !== k;
@@ -1276,7 +1302,7 @@ $('tabFine').onclick = () => setView('fine');
 let fineGraceUntil = 0;
 function syncNative(){
   const playing = !audio.paused;
-  const listening = screen === 'work' && ((view === 'listen' && playing) || (view === 'fine' && (playing || Date.now() < fineGraceUntil)));
+  const listening = screen === 'work' && ((view === 'listen' && (playing || (pmode === 'sent' && Date.now() < fineGraceUntil))) || (view === 'fine' && (playing || Date.now() < fineGraceUntil)));
   native('setKeepScreenOn', screen === 'work' && !audio.paused);
   native('setVolumeKeyMark', !!(listening && cfg.volMark));
 }
@@ -1306,11 +1332,13 @@ function renderStats(){
 /* ---------- 播放器 ---------- */
 function togglePlay(){ stopClip(); stopSpeak(); audio.paused ? audio.play() : audio.pause(); }
 $('playBtn').onclick = togglePlay;
-audio.onplay = () => { $('playBtn').textContent = '❚❚'; syncNative(); if (view === 'fine') fineControls(); };
+audio.onplay = () => { $('playBtn').textContent = '❚❚'; syncNative(); if (view === 'fine') fineControls(); if (view === 'listen' && pmode === 'sent') lsControls(); };
 audio.onpause = () => {
   $('playBtn').textContent = '▶';
   /* 精听时句子刚放完的 2.5 秒内，音量键仍然算“听不懂” */
-  if (view === 'fine'){ fineGraceUntil = Date.now() + 2500; setTimeout(syncNative, 2600); fineControls(); }
+  if (view === 'fine' || (view === 'listen' && pmode === 'sent')){ fineGraceUntil = Date.now() + 2500; setTimeout(syncNative, 2600); }
+  if (view === 'fine') fineControls();
+  if (view === 'listen' && pmode === 'sent') lsControls();
   syncNative();
 };
 audio.onended = () => { if (view === 'listen' && S.marks.length) $('listenStatus').textContent = `听完了，这一轮标记了 ${S.marks.length} 处。点“听完了，练意群”。`; };
@@ -1337,11 +1365,137 @@ function setListenMode(m){
   $('subLabel').hidden = m === 'blind';
   clearSel();
   setSubMode(m === 'blind' ? 'none' : subLang);
-  $('listenStatus').className = 'status';
-  $('listenStatus').textContent = m === 'blind' ? '按 ▶ 开始盲听，听不懂就按下面的按钮。' : '点字幕里的一个词，再点另一个词，就选中这一段；点句子空白处选中整句。';
+  setPlayMode(pmode);
 }
 $('lmode').onclick = e => { const b = e.target.closest('[data-m]'); if (b) setListenMode(b.dataset.m); };
 $('subMode').onchange = e => { subLang = e.target.value; LS.set('lh:sublang', subLang); setSubMode(subLang); };
+
+/* ---------- 一句一句地听 ---------- */
+let pmode = LS.get('lh:pmode', 'cont'), lsReveal = false, lwCur = null, lwTok = 0, lsAutoT = null;
+const LS_K = () => Math.min(Math.max(S.lsent || 0, 0), S.sents.length - 1);
+function setPlayMode(m){
+  lwStop(); stopClip(); clearTimeout(lsAutoT);
+  pmode = m; LS.set('lh:pmode', m);
+  $('pmode').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.p === m));
+  const sent = m === 'sent';
+  $('contCtrls').hidden = sent; $('lsPanel').hidden = !sent;
+  $('transcript').hidden = sent || !showSubs;
+  if (sent){ clearSel(); lsReveal = lmode === 'open'; renderLs(); }
+  $('listenStatus').className = 'status';
+  $('listenStatus').textContent = sent ? '每次只播一句。没听懂就按“听不懂”；“逐词”会把这句拆成单词一个个播。'
+    : lmode === 'blind' ? '按 ▶ 开始盲听，听不懂就按下面的按钮。' : '点字幕里的一个词，再点另一个词，就选中这一段；点句子空白处选中整句。';
+  syncNative();
+}
+$('pmode').onclick = e => { const b = e.target.closest('[data-p]'); if (b) setPlayMode(b.dataset.p); };
+function renderLs(){
+  if (!S?.sents?.length) return;
+  const k = LS_K(), {a, b} = S.sents[k];
+  const hard = new Set(S.marks.flatMap(m => m.idx));
+  $('lsPos').textContent = `第 ${k + 1} / ${S.sents.length} 句`;
+  const nm = S.marks.filter(m => m.idx.some(i => i >= a && i <= b)).length;
+  $('lsMarks').textContent = nm ? `这句标记了 ${nm} 处` : '';
+  $('lsMarks').style.color = nm ? 'var(--mark)' : '';
+  let h = '';
+  for (let i = a; i <= b; i++){
+    const w = wd(i);
+    h += `<span class="lw${hard.has(i) ? ' hard' : ''}${lwCur === i ? ' now' : ''}" data-i="${i}">${esc(lsReveal ? w : '•'.repeat(Math.min(w.replace(/[^\w'’-]/g, '').length || 1, 7)))}</span>`;
+  }
+  $('lsText').innerHTML = h;
+  $('lsText').classList.toggle('masked', !lsReveal);
+  $('lsCn').textContent = lsReveal ? (S.sentCn?.[k] || '') : '';
+  if (lsReveal && !S.sentCn?.[k]) translateSents([k, k + 1, k + 2].filter(x => x < S.sents.length), () => { if (pmode === 'sent') renderLs(); });
+  $('lsReveal').textContent = lsReveal ? '藏原文' : '看原文';
+  $('lsPrev').disabled = k === 0;
+  $('lsNext').textContent = k === S.sents.length - 1 ? '最后一句' : '下一句 ›';
+  $('lsNext').disabled = k === S.sents.length - 1;
+  lsControls();
+}
+function lsControls(){
+  const playing = !audio.paused && clip && clip.id === 'ls';
+  $('lsPlay').textContent = playing ? '❚❚ 暂停' : '▶ 播放';
+  $('lsWords').textContent = lwCur != null || lwTok % 2 === 1 ? '■ 停止' : '逐词';
+}
+function lsHighlight(i){
+  $('lsText').querySelectorAll('.lw.now').forEach(el => el.classList.remove('now'));
+  if (i != null) $('lsText').querySelector(`.lw[data-i="${i}"]`)?.classList.add('now');
+}
+let lsLastI = -1;
+function lsTick(t){
+  if (lwCur != null) return;
+  const {a, b} = S.sents[LS_K()];
+  let i = -1; for (let j = a; j <= b; j++) if (t >= S.words[j].s - 0.05) i = j;
+  if (i !== lsLastI){ lsLastI = i; lsHighlight(i >= 0 ? i : null); }
+}
+function lsPlay(slow){
+  lwStop(); clearTimeout(lsAutoT);
+  if (!slow && !audio.paused && clip?.id === 'ls'){ stopClip(); lsHighlight(null); lsControls(); return; }
+  const k = LS_K(), {a, b} = S.sents[k];
+  lsLastI = -1;
+  playClip(...wordSpan(a, b), {id: 'ls', rate: slow ? 0.75 : 1, onEnd: () => {
+    lsHighlight(null); lsControls();
+    if ($('lsAuto').checked && k === LS_K() && k < S.sents.length - 1)
+      lsAutoT = setTimeout(() => { if (pmode === 'sent' && view === 'listen' && k === LS_K()) lsGo(1, true); }, 1500);
+  }});
+  lsControls();
+}
+function lsGo(d, play = true){
+  lwStop(); stopClip(); clearTimeout(lsAutoT);
+  S.lsent = Math.min(Math.max(LS_K() + d, 0), S.sents.length - 1); save();
+  lsReveal = lmode === 'open';
+  renderLs();
+  if (play) lsPlay(false);
+}
+/* 逐词：用原声把这句一个词一个词地播，最后再连起来播一遍 */
+function clipAwait(a, b, rate, id){ return new Promise(res => playClip(a, b, {id, rate, onEnd: res})); }
+function lwStop(){ if (lwTok % 2 === 1) lwTok++; lwCur = null; if (S?.sents?.length && pmode === 'sent') { lsHighlight(null); lsControls(); } }
+async function lsWords(){
+  if (lwTok % 2 === 1){ lwStop(); stopClip(); return; }
+  clearTimeout(lsAutoT); stopClip(); stopSpeak();
+  const tok = ++lwTok, k = LS_K(), {a, b} = S.sents[k];
+  lsControls();
+  for (let i = a; i <= b && tok === lwTok; i++){
+    lwCur = i; lsHighlight(i); lsControls();
+    await clipAwait(...wordSpan(i, i), 1, 'lsw');
+    if (tok !== lwTok) return;
+    await sleep(550);
+  }
+  if (tok !== lwTok) return;
+  lwCur = null; lsHighlight(null);
+  await sleep(400); if (tok !== lwTok) return;
+  lsLastI = -1;
+  await clipAwait(...wordSpan(a, b), 1, 'ls');
+  if (tok === lwTok){ lwTok++; lsHighlight(null); lsControls(); }
+}
+$('lsPlay').onclick = () => lsPlay(false);
+$('lsSlow').onclick = () => lsPlay(true);
+$('lsWords').onclick = lsWords;
+$('lsPrev').onclick = () => lsGo(-1);
+$('lsNext').onclick = () => lsGo(1);
+$('lsReveal').onclick = () => { lsReveal = !lsReveal; renderLs(); };
+$('lsAuto').onchange = e => LS.set('lh:lsauto', e.target.checked);
+$('lsAuto').checked = LS.get('lh:lsauto', false);
+$('lsText').onclick = e => {
+  const w = e.target.closest('.lw'); if (!w) return;
+  lwStop(); clearTimeout(lsAutoT);
+  const i = +w.dataset.i; lwCur = null;
+  lsHighlight(i);
+  playClip(...wordSpan(i, i), {id: 'lsw1', rate: 0.9, onEnd: () => lsHighlight(null)});
+};
+/* 翻译任意几句（结果存到 S.sentCn，分段精听也能用） */
+let sTranslating = false;
+async function translateSents(ks, done){
+  S.sentCn = S.sentCn || {};
+  const need = ks.filter(k => !S.sentCn[k]);
+  if (!need.length || sTranslating || !aiKey()) return;
+  sTranslating = true;
+  try{
+    const json = await callAI('你是专业的英汉字幕译者。把每一句英文翻译成自然、口语化的简体中文，结合上下文，保持句子一一对应。只输出 JSON。',
+      '返回格式：{"items":[{"i":原样返回的序号,"cn":"中文翻译"}]}\n\n' + JSON.stringify(need.map(k => ({i: k, en: sentText(k)}))), 1500);
+    for (const it of json.items || []) S.sentCn[+it.i] = it.cn;
+    save(); done && done();
+  }catch(err){}
+  finally{ sTranslating = false; }
+}
 
 let wseg = [], lastSeg = -1, lastNow = -1;
 function renderTranscript(){
@@ -1473,9 +1627,10 @@ function tick(){
     }
   }
   if (view === 'fine' && clip && clip.id === 'fine' && !audio.paused) fineTick(t);
+  if (view === 'listen' && pmode === 'sent' && clip && /^ls/.test(clip.id) && !audio.paused) lsTick(t);
   if (clip && !audio.paused && t >= clip.b){
     if (clip.loop){ audio.pause(); const c = clip; setTimeout(() => { if (clip === c){ audio.currentTime = c.a; audio.play(); } }, 600); }
-    else { audio.pause(); clip = null; refreshClipButtons(); }
+    else { const c = clip; audio.pause(); clip = null; refreshClipButtons(); if (c.onEnd) c.onEnd(); }
   }
   requestAnimationFrame(tick);
 }
@@ -1504,7 +1659,20 @@ function flash(btn){ btn.classList.add('flash'); setTimeout(() => btn.classList.
 function addMark(){
   if (!S || screen !== 'work' || view !== 'listen') return;
   const t = audio.currentTime;
-  const idx = wordsForTap(t);
+  let idx = wordsForTap(t);
+  if (pmode === 'sent' && S.sents?.length){
+    const {a, b} = S.sents[LS_K()];
+    if (lwCur != null) idx = [lwCur];                       // 逐词播放时：就是正在播的这个词
+    else {
+      idx = idx.filter(i => i >= a && i <= b);
+      if (!idx.length){ let j = -1; for (let i = a; i <= b; i++) if (S.words[i].s < t) j = i; idx = [j >= 0 ? j : b]; }
+    }
+    pushMark(Math.min(t, S.words[idx[idx.length - 1]].e + cfg.lag + 0.01), idx, {sent: LS_K()});
+    flash($('markBtn')); renderLs();
+    $('listenStatus').className = 'status';
+    $('listenStatus').textContent = `已标记第 ${LS_K() + 1} 句：${idx.map(i => wd(i)).join(' ').replace(/[^\w\s'’-]/g, '')}`;
+    return;
+  }
   if (!idx.length) return;
   pushMark(t, idx);
   flash($('markBtn'));
@@ -1517,6 +1685,15 @@ document.addEventListener('keydown', e => {
   if (['INPUT','SELECT','TEXTAREA'].includes(e.target.tagName) || screen !== 'work') return;
   if (view === 'listen'){
     if (e.code === 'Space'){ e.preventDefault(); addMark(); }
+    if (pmode === 'sent'){
+      if (e.key === 'p' || e.key === 'P' || e.key === 'Enter') lsPlay(false);
+      else if (e.key === 's' || e.key === 'S') lsPlay(true);
+      else if (e.key === 'w' || e.key === 'W') $('lsWords').click();
+      else if (e.key === 'h' || e.key === 'H') $('lsReveal').click();
+      else if (e.key === 'ArrowRight') $('lsNext').click();
+      else if (e.key === 'ArrowLeft') $('lsPrev').click();
+      return;
+    }
     if (e.key === 'p' || e.key === 'P') togglePlay();
   } else if (view === 'fine' && F?.stage !== 'group'){
     if (e.code === 'Space'){ e.preventDefault(); fineMark(); }
@@ -1555,7 +1732,7 @@ function wordSpan(a, b){
 function playClip(a, b, opts={}){
   stopSpeak();
   audio.playbackRate = opts.rate || 1;
-  clip = {a, b, loop:!!opts.loop, id:opts.id};
+  clip = {a, b, loop:!!opts.loop, id:opts.id, onEnd:opts.onEnd};
   audio.currentTime = Math.max(0, a); audio.play();
   refreshClipButtons();
 }
@@ -2080,7 +2257,7 @@ $('relisten').onclick = () => {
   S.round += 1; S.marks = []; reviewRound = S.round;
   if (S.fine) S.fine = {size: S.fine.size, part: 0, stage: 'part', sent: 0, done: {}};
   save(); renderTicks(); renderStats(); markHardInTranscript();
-  audio.currentTime = 0; setListenMode('blind');
+  audio.currentTime = 0; S.lsent = 0; setListenMode('blind');
   setView('listen');
   $('listenStatus').textContent = `第 ${S.round} 轮开始，按 ▶ 盲听。`;
 };
