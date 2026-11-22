@@ -603,6 +603,7 @@ function explainError(err, status){
   if (status === 429 || /quota|billing/i.test(msg)) return '账户额度不足或请求过多：到 platform.openai.com 的 Billing 页面充值（ChatGPT Plus 会员不包含 API 额度）';
   if (status === 403) return '没有权限：' + msg + '（可能是所在地区不支持，或这个 Key 没有 Whisper 权限）';
   if (status === 413) return '文件太大，Whisper 上限 25MB';
+  if (/Invalid file format/i.test(msg)) return '音频格式无法识别：' + msg;
   return msg + (status ? `（HTTP ${status}）` : '');
 }
 async function apiFetch(url, opts){
@@ -822,6 +823,15 @@ async function importFile(f, opts = {}){
   transcribe(key);
 }
 
+/* Whisper 按文件名的扩展名判断格式，所以不能用节目标题（标题里常有句点）当文件名 */
+const WHISPER_EXT = /\.(flac|m4a|mp3|mp4|mpeg|mpga|oga|ogg|wav|webm)$/i;
+function uploadName(f){
+  const m = (f.name || '').match(WHISPER_EXT);
+  if (m) return 'audio.' + m[1].toLowerCase();
+  const t = (f.type || '').toLowerCase();
+  const ext = /wav/.test(t) ? 'wav' : /mp4|m4a|aac/.test(t) ? 'm4a' : /ogg|opus/.test(t) ? 'ogg' : /webm/.test(t) ? 'webm' : /flac/.test(t) ? 'flac' : 'mp3';
+  return 'audio.' + ext;
+}
 async function transcribe(key){
   const st = $('homeStatus'); st.className = 'status';
   if (!cfg.openaiKey){ st.className = 'status err'; st.textContent = '请先在设置里填写 OpenAI API Key，然后点音频开始转写'; renderLib(); return; }
@@ -832,7 +842,7 @@ async function transcribe(key){
   st.textContent = `正在转写「${s.name}」，几分钟的音频通常需要 10～60 秒…`;
   try{
     const fd = new FormData();
-    fd.append('file', f, s.name);
+    fd.append('file', f, uploadName(f));
     fd.append('model', 'whisper-1');
     fd.append('language', 'en');
     fd.append('response_format', 'verbose_json');
